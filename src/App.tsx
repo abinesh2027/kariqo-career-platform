@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, ChangeEvent, FormEvent } from 'react';
 import {
   Activity,
@@ -728,12 +728,14 @@ export default function App() {
 
         <div className="body app-view-enter" key={page}>{render(page, ctx)}</div>
 
-        <footer>
+      <footer>
           <span>© 2025 Kariqo · Learn. Build. Prove. Connect.</span>
           <span>
             Made for students, by <b>Brain Strom</b>
           </span>
-        </footer>
+      </footer>
+
+      <KariqoBuddy page={page} profile={records.profile} projects={records.projects.length} skills={records.skills.length} roadmap={records.roadmaps[0]} userId={userId} setPage={setPage} />
       </main>
 
       {toast && (
@@ -755,6 +757,80 @@ export default function App() {
       )}
     </div>
   );
+}
+
+function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage }: {
+  page: Page;
+  profile: Record<string, any>;
+  projects: number;
+  skills: number;
+  roadmap?: Record<string, any>;
+  userId: string;
+  setPage: (page: Page) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const taskKey = `kariqo-kiko-task:${userId}:${todayKey}`;
+  const [taskDone, setTaskDone] = useState(() => Boolean(userId && storage.getItem(taskKey) === 'done'));
+  const name = (profile.full_name || '').split(' ')[0];
+  const roadmapContent = roadmap?.content || {};
+  const roadmapTask = String(roadmapContent.next_action || roadmapContent.weeks?.[0]?.activities?.[0] || '').trim();
+  const todayTask = roadmapTask || (profile.career_goal ? `Spend 15 minutes building one small skill for ${profile.career_goal}.` : 'Add a career goal, then choose one skill to practise for 15 minutes.');
+
+  useEffect(() => {
+    setTaskDone(Boolean(userId && storage.getItem(taskKey) === 'done'));
+  }, [taskKey, userId]);
+
+  const guidance: Record<Page, { title: string; message: string; action: Page; actionLabel: string }> = {
+    Overview: profile.career_goal
+      ? { title: 'Your next small win', message: projects ? `You have ${projects} project${projects === 1 ? '' : 's'} to show. Add one skill you used so your Skill Passport has stronger proof.` : 'Start with one small project. It gives your skills real evidence for your Skill Passport.', action: projects ? 'Projects' : 'Projects', actionLabel: projects ? 'Open projects' : 'Start a project' }
+      : { title: 'Let’s set your direction', message: 'Add a career goal first. Kariqo can then make your roadmap and suggestions more relevant.', action: 'Profile & Settings', actionLabel: 'Set my career goal' },
+    'Skill DNA': { title: 'Build your skill picture', message: skills ? `${skills} skills are on your profile. Add evidence from a project or class to make them more convincing.` : 'Add skills you are learning, then connect them to projects as you build.', action: 'Projects', actionLabel: 'Add project evidence' },
+    'AI Roadmap': { title: 'Keep your roadmap practical', message: 'Pick one roadmap skill to practise this week, then add a small project that demonstrates it.', action: 'Projects', actionLabel: 'Plan a project' },
+    'Career Copilot': { title: 'Ask with context', message: 'Share your target role and what you have tried. The more of your profile is filled in, the more useful the guidance can be.', action: 'Profile & Settings', actionLabel: 'Review my profile' },
+    'Interview Practice': { title: 'Practice one answer', message: 'Try a short answer about a project: what problem you solved, what you did, and what changed.', action: 'Projects', actionLabel: 'Review my projects' },
+    Projects: { title: 'Show what you can do', message: 'A useful project entry includes the problem, your contribution, tools used, and a result you can explain.', action: 'Skill Passport', actionLabel: 'See my Skill Passport' },
+    'Skill Passport': { title: 'Make proof easy to scan', message: 'Keep project details specific and review each skill claim before sharing your passport.', action: 'Projects', actionLabel: 'Update project proof' },
+    Opportunities: { title: 'Make your profile discoverable', message: 'Check your skills and career goal before applying, so you can explain why you match the role.', action: 'Profile & Settings', actionLabel: 'Check my profile' },
+    'Job Offers': { title: 'Stay ready for a response', message: 'Keep your application details current and check the status of each offer here.', action: 'Applications', actionLabel: 'Track applications' },
+    Applications: { title: 'Keep your next step clear', message: 'Update each application after you hear back, and prepare one example that fits the role.', action: 'Interview Practice', actionLabel: 'Practice an answer' },
+    Mentor: { title: 'Bring one clear question', message: 'Before a mentor session, write down the decision or skill you want help with.', action: 'Live Classes', actionLabel: 'Explore live classes' },
+    'Live Classes': { title: 'Turn class time into progress', message: 'Pick a class that supports your current roadmap, then save one takeaway to your project notes.', action: 'AI Roadmap', actionLabel: 'View my roadmap' },
+    Notifications: { title: 'Keep up with updates', message: 'Review new messages and announcements so you do not miss a class or application update.', action: 'Announcements', actionLabel: 'View announcements' },
+    Announcements: { title: 'Stay in the loop', message: 'Check announcements for upcoming sessions, opportunities, and important platform updates.', action: 'Notifications', actionLabel: 'View notifications' },
+    'Customer Care': { title: 'We can help you move forward', message: 'If something is not working, describe the page and what you expected to happen in Customer Care.', action: 'Customer Care', actionLabel: 'Open support' },
+    'Profile & Settings': { title: 'A little profile goes a long way', message: 'Keep your career goal, education, and skills up to date so Kariqo can personalize your workspace.', action: 'Skill DNA', actionLabel: 'Review my skills' },
+  };
+  const tip = guidance[page];
+
+  return (
+    <div className={`kariqo-buddy ${open ? 'is-open' : ''}`}>
+      {open && <section className="kariqo-buddy-card" aria-label="Kiko learning companion">
+        <div className="kariqo-buddy-card-head"><div className="kariqo-buddy-avatar"><BuddyCreature /></div><div><small>KARIQO COMPANION</small><b>Kiko{ name ? ` · Hi ${name}!` : ''}</b></div><button aria-label="Close Kiko" onClick={() => setOpen(false)}><X size={16} /></button></div>
+        <div className={`kiko-daily-task ${taskDone ? 'completed' : ''}`}><div><small>TODAY’S ROADMAP STEP</small><p>{todayTask}</p></div>{taskDone ? <strong><Check size={13} /> Done!</strong> : <button onClick={() => { storage.setItem(taskKey, 'done'); setTaskDone(true); }}>Mark done</button>}</div>
+        {taskDone && <div className="kiko-celebration" role="status">You showed up for your goal today. Small steps count — Kiko is proud of you! ✨</div>}
+        <div className="kariqo-buddy-tip"><span>YOUR TIP FOR {page.toUpperCase()}</span><h3>{tip.title}</h3><p>{tip.message}</p></div>
+        <button className="primary kariqo-buddy-action" onClick={() => { setPage(tip.action); setOpen(false); }}>{tip.actionLabel}<ArrowRight size={14} /></button>
+        <small className="kariqo-buddy-note">Helpful prompts based on your Kariqo workspace · not a substitute for mentor advice</small>
+      </section>}
+      <button className="kariqo-buddy-launch" aria-label={open ? 'Close Kiko companion' : 'Open Kiko companion'} aria-expanded={open} onClick={() => { setOpen(!open); setDismissed(true); }}>
+        <span className="kariqo-buddy-creature"><BuddyCreature /></span><span className="kariqo-buddy-launch-label">{open ? 'Close' : dismissed ? 'Kiko' : 'Need a nudge?'}</span>
+      </button>
+    </div>
+  );
+}
+
+function BuddyCreature() {
+  return <svg viewBox="0 0 64 64" role="img" aria-label="Kiko mascot" className="buddy-creature-svg">
+    <path className="buddy-ear" d="M17 22 11 9l15 8M47 22l6-13-15 8" />
+    <path className="buddy-body" d="M12 33c0-13 8-22 20-22s20 9 20 22-8 22-20 22-20-9-20-22Z" />
+    <path className="buddy-cheek" d="M17 38c3 2 6 2 9 0M38 38c3 2 6 2 9 0" />
+    <ellipse className="buddy-eye" cx="25" cy="30" rx="2.3" ry="3.2" /><ellipse className="buddy-eye" cx="39" cy="30" rx="2.3" ry="3.2" />
+    <path className="buddy-smile" d="M28 38c2.5 3 5.5 3 8 0" />
+    <path className="buddy-star" d="m32 3 1.4 3.1 3.1 1.4-3.1 1.4L32 13l-1.4-3.1-3.1-1.4 3.1-1.4L32 3Z" />
+  </svg>;
 }
 
 function Avatar({ user, photo }: { user: string; photo: string }) {
@@ -2941,6 +3017,7 @@ function Classes({ c }: { c: Ctx }) {
                 </article>;
               })}
             </div>
+            {registrationByClass.has(x.id) && Date.now() >= new Date(x.starts_at).getTime() && Date.now() <= new Date(x.starts_at).getTime() + (Number(x.duration_minutes) || 60) * 60000 && <ClassGazeCoach title={x.title} />}
             <button
               className={registrationByClass.has(x.id) ? 'registered-class-button' : 'secondary'}
               disabled={registrationByClass.has(x.id) || new Date(x.starts_at).getTime() < Date.now()}
@@ -2964,6 +3041,138 @@ function Classes({ c }: { c: Ctx }) {
       )}
     </>
   );
+}
+
+function ClassGazeCoach({ title }: { title: string }) {
+  const [active, setActive] = useState(false);
+  const [status, setStatus] = useState('Camera is off. Kiko never starts it without your click.');
+  const [nudge, setNudge] = useState('');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (!active) return;
+    let stopped = false;
+    let stream: MediaStream | undefined;
+    let landmarker: { detectForVideo: (video: HTMLVideoElement, timestamp: number) => { faceLandmarks: { x: number; y: number }[][] }; close: () => void } | undefined;
+    let frameId = 0;
+    let lastSample = 0;
+    let awaySince = 0;
+    let nudged = false;
+    let centeredSince = 0;
+    let lastVideoTime = -1;
+    const stopCamera = () => {
+      stopped = true;
+      cancelAnimationFrame(frameId);
+      stream?.getTracks().forEach((track) => track.stop());
+      landmarker?.close();
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        setStatus('Paused because you left Kariqo. Camera is now off.');
+        setNudge('Your class is still open. Kiko paused the camera while you were away.');
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Kiko · class focus', { body: `Your ${title} class is still open. The camera has been paused.` });
+        }
+        setActive(false);
+      } else if (!stopped) {
+        setNudge('Welcome back! Camera focus is paused; start it again if you want.');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    const eyePosition = (points: { x: number; y: number }[], corners: [number, number], iris: number[]) => {
+      const a = points[corners[0]], b = points[corners[1]];
+      const left = Math.min(a.x, b.x), right = Math.max(a.x, b.x);
+      const irisX = iris.reduce((sum, index) => sum + points[index].x, 0) / iris.length;
+      return (irisX - left) / Math.max(.0001, right - left);
+    };
+    const detect = (now: number) => {
+      if (stopped) return;
+      frameId = requestAnimationFrame(detect);
+      const video = videoRef.current;
+      if (!landmarker || !video || video.readyState < 2 || video.currentTime === lastVideoTime || now - lastSample < 700) return;
+      lastSample = now;
+      lastVideoTime = video.currentTime;
+      try {
+        const result = landmarker.detectForVideo(video, now);
+        const points = result.faceLandmarks[0];
+        if (!points) {
+          setStatus('Face not clear yet — adjust your camera or lighting.');
+          awaySince = 0;
+          return;
+        }
+        const leftEye = eyePosition(points, [33, 133], [468, 469, 470, 471, 472]);
+        const rightEye = eyePosition(points, [362, 263], [473, 474, 475, 476, 477]);
+        const lookingAway = (leftEye < .27 && rightEye < .27) || (leftEye > .73 && rightEye > .73);
+        if (lookingAway) {
+          centeredSince = 0;
+          if (!awaySince) awaySince = now;
+          const seconds = Math.round((now - awaySince) / 1000);
+          setStatus(seconds >= 12 ? 'Kiko noticed a longer look away.' : 'Tracking locally · approximate eye direction');
+          if (seconds >= 12 && !nudged) {
+            nudged = true;
+            setNudge('Quick reset: your class is here when you’re ready. Brief breaks are okay.');
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('Kiko · gentle reminder', { body: 'Your eyes seem away from the class for a little while. Ready to come back?' });
+            }
+          }
+        } else {
+          awaySince = 0;
+          if (!centeredSince) centeredSince = now;
+          if (now - centeredSince > 2500) nudged = false;
+          setStatus('Tracking locally · camera and lighting can affect accuracy.');
+        }
+      } catch {
+        setStatus('Kiko could not read this camera frame. You can stop and try again.');
+      }
+    };
+    const start = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access is unavailable here. Open Kariqo on a secure https site or localhost.');
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } }, audio: false });
+        if (stopped) { stream.getTracks().forEach((track) => track.stop()); return; }
+        if (!videoRef.current) throw new Error('Camera preview is not ready.');
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setStatus('Loading on-device eye landmark model…');
+        const { FilesetResolver, FaceLandmarker } = await import('@mediapipe/tasks-vision');
+        const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm');
+        landmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: '/models/face_landmarker.task', delegate: 'CPU' },
+          runningMode: 'VIDEO', numFaces: 1, minFaceDetectionConfidence: .6, minTrackingConfidence: .6,
+        });
+        if (!stopped) { setStatus('Tracking locally · approximate eye direction'); frameId = requestAnimationFrame(detect); }
+      } catch (error) {
+        if (!stopped) {
+          const message = error instanceof Error ? error.message : 'Camera could not start.';
+          setStatus(message.includes('Permission') || message.includes('denied') ? 'Camera permission was not granted. You can still attend without tracking.' : `Eye focus is unavailable: ${message}`);
+          setActive(false);
+        }
+      }
+    };
+    void start();
+    return () => { document.removeEventListener('visibilitychange', onVisibilityChange); stopCamera(); };
+  }, [active, title]);
+
+  const toggle = async () => {
+    if (active) {
+      setActive(false);
+      setStatus('Camera is off. Kiko never starts it without your click.');
+      return;
+    }
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch { /* In-app focus reminders remain available. */ }
+    }
+    setNudge('');
+    setStatus('Requesting camera permission…');
+    setActive(true);
+  };
+
+  return <div className={`kiko-focus-nudge ${active ? 'active' : ''}`}>
+    <div className="kiko-gaze-copy"><b>{active ? 'Kiko eye-focus nudges are on' : 'Try Kiko eye-focus nudges'}</b><small>Optional camera permission; browser notification permission may also be requested for reminders while you switch tabs. Eye direction is approximate and processed on this device; no video or gaze history is saved. Camera pauses if you switch away.</small><small className="kiko-gaze-status">{status}</small>{nudge && <span role="status">{nudge}</span>}<details><summary>How this works</summary><p>Kiko looks for sustained sideways eye direction and waits 12 seconds before a gentle reminder. Glances and breaks are normal; this is not attendance, an exam monitor, or proof of attention. You can stop it any time.</p></details></div>
+    {active && <video ref={videoRef} className="kiko-camera-preview" muted playsInline aria-label="Local camera preview for Kiko eye focus" />}
+    <button className={active ? 'secondary' : 'primary'} onClick={() => void toggle()}>{active ? 'Stop camera' : 'Enable camera'}</button>
+  </div>;
 }
 
 function Notifications({ c }: { c: Ctx }) {
