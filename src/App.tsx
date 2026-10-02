@@ -1507,6 +1507,7 @@ type OwnerOverview = {
   companyPaymentSetup?: { ready: boolean; missing: string[] };
   subscriptions: { userId: string; name: string; email: string; status: string; currentEnd: string | null; updatedAt: string; providerSubscriptionId: string }[];
   companyRequests: { id: string; userId: string; companyName: string; contactName: string; email: string; status: string; createdAt: string }[];
+  supportRequests: { id: string; userId: string; name: string; email: string; topic: string; body: string; status: 'open' | 'in_progress' | 'resolved'; staffReply: string; staffRepliedAt: string | null; createdAt: string; updatedAt: string }[];
 };
 
 function OwnerDashboard({ user, ownerProfile, email, logout, say, toast }: { user: string; ownerProfile: Record<string, any>; email: string; logout: () => Promise<void>; say: (s: string, type?: ToastState['type']) => void; toast: ToastState | null }) {
@@ -1514,6 +1515,8 @@ function OwnerDashboard({ user, ownerProfile, email, logout, say, toast }: { use
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [reviewingRequest, setReviewingRequest] = useState('');
+  const [savingSupportId, setSavingSupportId] = useState('');
+  const [supportDrafts, setSupportDrafts] = useState<Record<string, { status: 'open' | 'in_progress' | 'resolved'; staffReply: string }>>({});
 
   const load = async () => {
     if (!supabase) {
@@ -1568,6 +1571,26 @@ function OwnerDashboard({ user, ownerProfile, email, logout, say, toast }: { use
     }
   };
 
+  const saveSupportRequest = async (request: OwnerOverview['supportRequests'][number]) => {
+    if (!supabase) return;
+    const draft = supportDrafts[request.id] || { status: request.status, staffReply: request.staffReply || '' };
+    setSavingSupportId(request.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('owner-dashboard', { body: {
+        action: 'update-support-request', requestId: request.id, status: draft.status, staffReply: draft.staffReply,
+      } });
+      if (error) throw new Error(await functionErrorMessage(error, 'Could not save customer care update'));
+      if (data?.error) throw new Error(data.error);
+      say('Complaint status and reply saved.', 'success');
+      await load();
+    } catch (error) {
+      say(dbMessage(error, 'Could not update customer care request'), 'error');
+    } finally {
+      setSavingSupportId('');
+    }
+  };
+  const supportRequests = overview?.supportRequests || [];
+
   return (
     <div className="owner-portal">
       <header className="owner-topbar">
@@ -1593,6 +1616,17 @@ function OwnerDashboard({ user, ownerProfile, email, logout, say, toast }: { use
           </section>
           <section className="owner-subscriptions"><div className="owner-section-title"><div><h2>Company access requests</h2><p>Review employer registrations before their workspace can access opted-in candidate information.</p></div></div>
             {!overview.companyRequests?.length ? <div className="owner-empty">No company access requests yet.</div> : <div className="owner-table-wrap"><table><thead><tr><th>Company</th><th>Contact</th><th>Status</th><th>Requested</th><th>Review</th></tr></thead><tbody>{overview.companyRequests.map((request) => <tr key={request.id}><td><b>{request.companyName}</b></td><td>{request.contactName || 'Company contact'}<small>{request.email || request.userId}</small></td><td><span className={`owner-status ${request.status}`}>{request.status}</span></td><td>{new Date(request.createdAt).toLocaleDateString()}</td><td>{request.status === 'pending' ? <div className="owner-review-actions"><button className="primary" onClick={() => void reviewCompanyRequest(request.id, 'approve')} disabled={Boolean(reviewingRequest)}>{reviewingRequest === request.id ? 'Saving…' : 'Approve'}</button><button className="secondary" onClick={() => void reviewCompanyRequest(request.id, 'reject')} disabled={Boolean(reviewingRequest)}>Reject</button></div> : 'Reviewed'}</td></tr>)}</tbody></table></div>}
+          </section>
+          <section className="owner-subscriptions owner-support-inbox"><div className="owner-section-title"><div><h2>Customer care inbox</h2><p>{supportRequests.filter((request) => request.status !== 'resolved').length} open requests · Students can see your status and reply in their request history.</p></div><button className="secondary" onClick={() => void load()} disabled={loading}><RefreshCw size={13} /> Refresh</button></div>
+            {!supportRequests.length ? <div className="owner-empty">No student complaints or support requests yet.</div> : <div className="owner-support-list">{supportRequests.map((request) => {
+              const draft = supportDrafts[request.id] || { status: request.status, staffReply: request.staffReply || '' };
+              return <article className="owner-support-ticket" key={request.id}>
+                <header><div><b>{request.topic}</b><small>{request.name || 'Kariqo student'} · {request.email || request.userId} · {new Date(request.createdAt).toLocaleString()}</small></div><span className={`owner-status ${request.status}`}>{request.status.replace('_', ' ')}</span></header>
+                <p className="owner-support-body">{request.body}</p>
+                <div className="owner-support-controls"><label>Status<select value={draft.status} onChange={(event) => setSupportDrafts((current) => ({ ...current, [request.id]: { ...draft, status: event.target.value as 'open' | 'in_progress' | 'resolved' } }))}><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select></label><label className="owner-support-reply">Reply to student<textarea value={draft.staffReply} maxLength={5000} rows={3} placeholder="Write a helpful reply the student can see…" onChange={(event) => setSupportDrafts((current) => ({ ...current, [request.id]: { ...draft, staffReply: event.target.value } }))} /></label></div>
+                <footer><small>{request.staffRepliedAt ? `Last reply ${new Date(request.staffRepliedAt).toLocaleString()}` : 'No team reply sent yet'}</small><button className="primary" onClick={() => void saveSupportRequest(request)} disabled={Boolean(savingSupportId)}>{savingSupportId === request.id ? 'Saving…' : 'Save update'}</button></footer>
+              </article>;
+            })}</div>}
           </section>
           <section className="owner-subscriptions"><div className="owner-section-title"><div><h2>Subscriptions</h2><p>Payment status synced from Razorpay.</p></div></div>
             {!overview.subscriptions.length ? <div className="owner-empty">No subscription records yet. Checkout must be configured before students can subscribe.</div> : <div className="owner-table-wrap"><table><thead><tr><th>Account</th><th>Status</th><th>Access through</th><th>Updated</th><th>Razorpay ID</th></tr></thead><tbody>{overview.subscriptions.map((item) => <tr key={item.providerSubscriptionId}><td><b>{item.name || 'Kariqo user'}</b><small>{item.email || item.userId}</small></td><td><span className={`owner-status ${item.status}`}>{item.status}</span></td><td>{item.currentEnd ? new Date(item.currentEnd).toLocaleDateString() : '—'}</td><td>{new Date(item.updatedAt).toLocaleDateString()}</td><td><code>{item.providerSubscriptionId}</code></td></tr>)}</tbody></table></div>}
@@ -3340,7 +3374,7 @@ function Support({ c }: { c: Ctx }) {
     let live = true;
     supabase
       .from('support_messages')
-      .select('id,topic,body,created_at')
+      .select('id,topic,body,status,staff_reply,created_at,updated_at')
       .eq('user_id', c.userId)
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
@@ -3364,7 +3398,7 @@ function Support({ c }: { c: Ctx }) {
     if (!body) return c.say('Type your message first', 'error');
     setBusy(true);
 
-    const { data, error } = await supabase.from('support_messages').insert({ user_id: c.userId, topic, body }).select('id,topic,body,created_at').single();
+    const { data, error } = await supabase.from('support_messages').insert({ user_id: c.userId, topic, body }).select('id,topic,body,status,staff_reply,created_at,updated_at').single();
     setBusy(false);
 
     if (error) {
@@ -3374,7 +3408,7 @@ function Support({ c }: { c: Ctx }) {
 
     form.reset();
     if (data) setMessages((rows) => [data, ...rows]);
-    c.say('Support request saved. Reference kept in request history below.', 'success');
+    c.say('Your request was sent to the Kariqo customer care team.', 'success');
   };
 
   return (
@@ -3389,7 +3423,7 @@ function Support({ c }: { c: Ctx }) {
               <br />
               you <em>figure out?</em>
             </h2>
-            <p>Messages are saved privately to your Kariqo account. Brain Strom can review your request from the support records.</p>
+            <p>Your request is saved privately to your Kariqo account. The Kariqo team can review it, update its status, and reply here.</p>
           </div>
           <Panel className="support-history">
             <h3>Your requests</h3>
@@ -3401,6 +3435,8 @@ function Support({ c }: { c: Ctx }) {
                     <small>{new Date(m.created_at).toLocaleString()}</small>
                   </div>
                   <p>{m.body}</p>
+                  <span className={`support-status ${m.status || 'open'}`}>{String(m.status || 'open').replace('_', ' ')}</span>
+                  {m.staff_reply && <div className="support-team-reply"><b>Kariqo team reply</b><p>{m.staff_reply}</p></div>}
                   <small>Reference: {m.id.slice(0, 8).toUpperCase()}</small>
                 </article>
               ))
