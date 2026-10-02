@@ -762,7 +762,7 @@ export default function App() {
           </span>
       </footer>
 
-      <KariqoBuddy page={page} profile={records.profile} projects={records.projects.length} skills={records.skills.length} roadmap={records.roadmaps[0]} userId={userId} setPage={setPage} offers={records.jobOffers} skillScores={records.skills} assignmentScores={records.assignmentScores} />
+      <KariqoBuddy profile={records.profile} roadmap={records.roadmaps[0]} userId={userId} setPage={setPage} offers={records.jobOffers} skillScores={records.skills} assignmentScores={records.assignmentScores} notices={notices} announcements={records.announcements} />
       </main>
 
       {toast && (
@@ -786,20 +786,18 @@ export default function App() {
   );
 }
 
-function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage, offers, skillScores, assignmentScores }: {
-  page: Page;
+function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, assignmentScores, notices, announcements }: {
   profile: Record<string, any>;
-  projects: number;
-  skills: number;
   roadmap?: Record<string, any>;
   userId: string;
   setPage: (page: Page) => void;
   offers: Record<string, any>[];
   skillScores: Record<string, any>[];
   assignmentScores: Record<string, any>[];
+  notices: Notice[];
+  announcements: Record<string, any>[];
 }) {
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
   const [curious, setCurious] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isMoving, setIsMoving] = useState(false);
@@ -839,7 +837,6 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
 
     setNewOffer(latestOffer);
     setOpen(true);
-    setDismissed(true);
   }, [latestOffer?.id, userId]);
 
   useEffect(() => {
@@ -848,28 +845,6 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
     return () => clearTimeout(timer);
   }, [newOffer]);
 
-  const guidance: Record<Page, { title: string; message: string; action: Page; actionLabel: string }> = {
-    Overview: profile.career_goal
-      ? { title: 'Your next small win', message: projects ? `You have ${projects} project${projects === 1 ? '' : 's'} to show. Add one skill you used so your Skill Passport has stronger proof.` : 'Start with one small project. It gives your skills real evidence for your Skill Passport.', action: projects ? 'Projects' : 'Projects', actionLabel: projects ? 'Open projects' : 'Start a project' }
-      : { title: 'Let’s set your direction', message: 'Add a career goal first. Kariqo can then make your roadmap and suggestions more relevant.', action: 'Profile & Settings', actionLabel: 'Set my career goal' },
-    'Skill DNA': { title: 'Build your skill picture', message: skills ? `${skills} skills are on your profile. Add evidence from a project or class to make them more convincing.` : 'Add skills you are learning, then connect them to projects as you build.', action: 'Projects', actionLabel: 'Add project evidence' },
-    'AI Roadmap': { title: 'Keep your roadmap practical', message: 'Pick one roadmap skill to practise this week, then add a small project that demonstrates it.', action: 'Projects', actionLabel: 'Plan a project' },
-    'Career Copilot': { title: 'Ask with context', message: 'Share your target role and what you have tried. The more of your profile is filled in, the more useful the guidance can be.', action: 'Profile & Settings', actionLabel: 'Review my profile' },
-    'Interview Practice': { title: 'Practice one answer', message: 'Try a short answer about a project: what problem you solved, what you did, and what changed.', action: 'Projects', actionLabel: 'Review my projects' },
-    Projects: { title: 'Show what you can do', message: 'A useful project entry includes the problem, your contribution, tools used, and a result you can explain.', action: 'Skill Passport', actionLabel: 'See my Skill Passport' },
-    'Skill Passport': { title: 'Make proof easy to scan', message: 'Keep project details specific and review each skill claim before sharing your passport.', action: 'Projects', actionLabel: 'Update project proof' },
-    Opportunities: { title: 'Make your profile discoverable', message: 'Check your skills and career goal before applying, so you can explain why you match the role.', action: 'Profile & Settings', actionLabel: 'Check my profile' },
-    'Job Offers': { title: 'Stay ready for a response', message: 'Keep your application details current and check the status of each offer here.', action: 'Applications', actionLabel: 'Track applications' },
-    Applications: { title: 'Keep your next step clear', message: 'Update each application after you hear back, and prepare one example that fits the role.', action: 'Interview Practice', actionLabel: 'Practice an answer' },
-    Mentor: { title: 'Bring one clear question', message: 'Before a mentor session, write down the decision or skill you want help with.', action: 'Live Classes', actionLabel: 'Explore live classes' },
-    'Live Classes': { title: 'Turn class time into progress', message: 'Pick a class that supports your current roadmap, then save one takeaway to your project notes.', action: 'AI Roadmap', actionLabel: 'View my roadmap' },
-    Notifications: { title: 'Keep up with updates', message: 'Review new messages and announcements so you do not miss a class or application update.', action: 'Announcements', actionLabel: 'View announcements' },
-    Announcements: { title: 'Stay in the loop', message: 'Check announcements for upcoming sessions, opportunities, and important platform updates.', action: 'Notifications', actionLabel: 'View notifications' },
-    'Customer Care': { title: 'We can help you move forward', message: 'If something is not working, describe the page and what you expected to happen in Customer Care.', action: 'Customer Care', actionLabel: 'Open support' },
-    'Profile & Settings': { title: 'A little profile goes a long way', message: 'Keep your career goal, education, and skills up to date so Kariqo can personalize your workspace.', action: 'Skill DNA', actionLabel: 'Review my skills' },
-  };
-  const tip = guidance[page];
-
   return (
     <div className={`kariqo-buddy ${open ? 'is-open' : ''} ${isMoving ? 'is-moving' : ''}`} style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}>
       {open && <section className={`kariqo-buddy-card mood-${mood}`} aria-label="Kiko learning companion">
@@ -877,12 +852,16 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
         {newOffer ? <div className="kiko-mood-message excited" role="status"><b>It’s offer time! 🎉</b><span>{newOffer.company_name || 'A company'} sent you an offer for {newOffer.job_title || 'a role'}. Congratulations, {name || 'you'}! Kiko is so proud of you.</span><button onClick={() => { setPage('Job Offers'); setOpen(false); }}>See your offer <ArrowRight size={13} /></button></div> : performanceLow && <div className="kiko-mood-message supportive"><b>That looks like a tough stretch.</b><span>One result doesn’t define you. Let’s pick one small thing to practise — Kiko is cheering you on.</span><button onClick={() => { setPage('AI Roadmap'); setOpen(false); }}>Find one small next step <ArrowRight size={13} /></button></div>}
         <div className={`kiko-daily-task ${taskDone ? 'completed' : ''}`}><div><small>TODAY’S ROADMAP STEP</small><p>{todayTask}</p></div>{taskDone ? <strong><Check size={13} /> Done!</strong> : <button onClick={() => { storage.setItem(taskKey, 'done'); setTaskDone(true); }}>Mark done</button>}</div>
         {taskDone && <div className="kiko-celebration" role="status">You showed up for your goal today. Small steps count — Kiko is proud of you! ✨</div>}
-        <div className="kariqo-buddy-tip"><span>YOUR TIP FOR {page.toUpperCase()}</span><h3>{tip.title}</h3><p>{tip.message}</p></div>
-        <button className="primary kariqo-buddy-action" onClick={() => { setPage(tip.action); setOpen(false); }}>{tip.actionLabel}<ArrowRight size={14} /></button>
-        <small className="kariqo-buddy-note">Helpful prompts based on your Kariqo workspace · not a substitute for mentor advice</small>
+        <section className="kiko-updates" aria-label="Recent notifications and announcements">
+          <div className="kiko-updates-heading"><b>Quick updates</b><button onClick={() => { setPage('Notifications'); setOpen(false); }}>See all <ArrowRight size={12} /></button></div>
+          {notices.slice(0, 2).map((notice, index) => <button className="kiko-update-row" key={notice.id || `${notice.title}-${index}`} onClick={() => { setPage('Notifications'); setOpen(false); }}><span className={`kiko-update-dot ${notice.unread ? 'unread' : ''}`} /><span><b>{notice.title}</b><small>{notice.detail}</small></span></button>)}
+          {announcements.slice(0, 2).map((announcement) => <button className="kiko-update-row" key={announcement.id} onClick={() => { setPage('Announcements'); setOpen(false); }}><span className="kiko-update-dot announcement" /><span><b>{announcement.title}</b><small>{announcement.body}</small></span></button>)}
+          {!notices.length && !announcements.length && <p className="kiko-no-updates">No new updates right now.</p>}
+        </section>
+        <div className="kiko-quick-links"><button onClick={() => { setPage('AI Roadmap'); setOpen(false); }}><Compass size={13} /> Roadmap</button><button onClick={() => { setPage('Announcements'); setOpen(false); }}><MessageCircle size={13} /> Announcements</button></div>
       </section>}
-      <button className={`kariqo-buddy-launch mood-${mood}`} aria-label={open ? 'Close Kiko companion' : offerMood ? 'Kiko celebrates your new job offer' : performanceLow ? 'Kiko is here to encourage you' : 'Open Kiko companion'} aria-expanded={open} onMouseEnter={() => setCurious(true)} onMouseLeave={() => setCurious(false)} onPointerDown={(event) => { if (event.button !== 0) return; dragOrigin.current = { x: event.clientX, y: event.clientY, offsetX: dragOffset.x, offsetY: dragOffset.y }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { const origin = dragOrigin.current; if (!origin) return; const dx = event.clientX - origin.x; const dy = event.clientY - origin.y; if (Math.abs(dx) + Math.abs(dy) > 4) wasDragged.current = true; if (wasDragged.current) { setIsMoving(true); setDragOffset({ x: origin.offsetX + dx, y: origin.offsetY + dy }); } }} onPointerUp={() => { dragOrigin.current = null; setIsMoving(false); }} onPointerCancel={() => { dragOrigin.current = null; setIsMoving(false); }} onClick={() => { if (wasDragged.current) { wasDragged.current = false; return; } setOpen(!open); setDismissed(true); }}>
-        <span className={`kariqo-buddy-creature mood-${mood} ${curious ? 'is-curious' : ''}`}><BuddyCreature mood={mood} curious={curious} /></span><span className="kariqo-buddy-launch-label">{open ? 'Close' : offerMood ? 'Offer news!' : performanceLow ? 'You’ve got this' : dismissed ? 'Kiko' : 'Need a nudge?'}</span>
+      <button className={`kariqo-buddy-launch mood-${mood}`} aria-label={open ? 'Close Kiko companion' : offerMood ? 'Kiko celebrates your new job offer' : performanceLow ? 'Kiko is here to encourage you' : 'Open Kiko companion'} aria-expanded={open} onMouseEnter={() => setCurious(true)} onMouseLeave={() => setCurious(false)} onPointerDown={(event) => { if (event.button !== 0) return; dragOrigin.current = { x: event.clientX, y: event.clientY, offsetX: dragOffset.x, offsetY: dragOffset.y }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { const origin = dragOrigin.current; if (!origin) return; const dx = event.clientX - origin.x; const dy = event.clientY - origin.y; if (Math.abs(dx) + Math.abs(dy) > 4) wasDragged.current = true; if (wasDragged.current) { setIsMoving(true); setDragOffset({ x: origin.offsetX + dx, y: origin.offsetY + dy }); } }} onPointerUp={() => { dragOrigin.current = null; setIsMoving(false); }} onPointerCancel={() => { dragOrigin.current = null; setIsMoving(false); }} onClick={() => { if (wasDragged.current) { wasDragged.current = false; return; } setOpen(!open); }}>
+        <span className={`kariqo-buddy-creature mood-${mood} ${curious ? 'is-curious' : ''}`}><BuddyCreature mood={mood} curious={curious} /></span>
       </button>
     </div>
   );

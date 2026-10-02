@@ -95,12 +95,12 @@
 
 /* Kiko is a small, optional learning companion for the student workspace. */
 .kariqo-buddy{position:fixed;right:24px;bottom:24px;z-index:30;display:grid;justify-items:end;gap:12px;font-family:'DM Sans',sans-serif}
-.kariqo-buddy-launch{display:flex;align-items:center;gap:9px;min-height:70px;padding:4px 14px 4px 4px;border:1px solid #e8e1ff;border-radius:24px;background:#fff;color:#51447e;box-shadow:0 8px 26px #30245a20;transition:transform .2s ease,box-shadow .2s ease}
-.kariqo-buddy-launch:hover{transform:translateY(-2px);box-shadow:0 12px 30px #30245a2b}
-.kariqo-buddy-launch-label{font-size:11px;font-weight:700;white-space:nowrap}
-.kariqo-buddy-creature,.kariqo-buddy-avatar{display:grid;place-items:center;flex:none;width:58px;height:62px;border-radius:19px;background:linear-gradient(145deg,#f0eaff,#def7f2);overflow:hidden}
-.kariqo-buddy-avatar{width:46px;height:46px;border-radius:15px}
-.buddy-creature-svg{width:64px;height:70px;overflow:visible;animation:kiko-bob 3s ease-in-out infinite}
+.kariqo-buddy-launch{display:grid;place-items:center;width:102px;height:108px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;transition:transform .2s ease;cursor:grab}
+.kariqo-buddy-launch:hover{transform:translateY(-3px) scale(1.04)}
+.kariqo-buddy-launch:focus-visible{outline:2px solid #927ee4;outline-offset:2px;border-radius:24px}
+.kariqo-buddy-creature,.kariqo-buddy-avatar{display:grid;place-items:center;flex:none;width:96px;height:100px;border-radius:0;background:transparent;overflow:visible}
+.kariqo-buddy-avatar{width:46px;height:46px;border-radius:15px;background:linear-gradient(145deg,#f0eaff,#def7f2)}
+.buddy-creature-svg{width:94px;height:103px;overflow:visible;animation:kiko-bob 3s ease-in-out infinite;filter:drop-shadow(0 5px 7px #30245a20)}
 .kariqo-buddy-avatar .buddy-creature-svg{width:48px;height:53px}
 .buddy-shadow{fill:#392b6d18;transform-box:fill-box;transform-origin:center;animation:kiko-shadow 3s ease-in-out infinite}
 .buddy-tail{fill:none;stroke:#745bd5;stroke-width:8;stroke-linecap:round;stroke-linejoin:round;transform-box:fill-box;transform-origin:8% 80%;animation:kiko-tail-wag 2.8s ease-in-out infinite}
@@ -132,10 +132,10 @@
 .buddy-creature-svg.mood-excited .buddy-arm-left{animation:kiko-wave-left .45s ease-in-out infinite alternate}
 .buddy-creature-svg.mood-excited .buddy-arm-right{animation:kiko-wave-right .45s ease-in-out infinite alternate}
 .buddy-creature-svg.mood-excited .buddy-eye{animation:kiko-happy-blink 2.4s ease-in-out infinite}
-.kariqo-buddy-launch.mood-excited{border-color:#f3d88f;background:linear-gradient(110deg,#fffdf5,#fff7e5);color:#75521a}
-.kariqo-buddy-launch.mood-supportive{border-color:#d9e6f6;background:linear-gradient(110deg,#fbfcff,#f1f6ff);color:#52617d}
-.kariqo-buddy-avatar.mood-excited,.kariqo-buddy-creature.mood-excited{background:linear-gradient(145deg,#fff2c9,#ffe2c0)}
-.kariqo-buddy-avatar.mood-supportive,.kariqo-buddy-creature.mood-supportive{background:linear-gradient(145deg,#e8f1ff,#eceaff)}
+.kariqo-buddy-launch.mood-excited .buddy-creature-svg{filter:drop-shadow(0 5px 8px #e6ae4838)}
+.kariqo-buddy-launch.mood-supportive .buddy-creature-svg{filter:drop-shadow(0 5px 8px #7895d334)}
+.kariqo-buddy-avatar.mood-excited{background:linear-gradient(145deg,#fff2c9,#ffe2c0)}
+.kariqo-buddy-avatar.mood-supportive{background:linear-gradient(145deg,#e8f1ff,#eceaff)}
 .kiko-mood-message{display:grid;gap:6px;margin-top:12px;padding:11px 12px;border:1px solid;border-radius:11px;animation:kiko-card-in .24s ease-out both}
 .kiko-mood-message b{font:700 11px Manrope}
 .kiko-mood-message span{font-size:10px;line-height:1.55}
@@ -157,6 +157,20 @@
 .kariqo-buddy-note{display:block;margin-top:10px;font-size:8px;line-height:1.45;color:#9996a5}
 .kiko-daily-task{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px;border:1px solid #eee9ff;border-radius:11px;background:linear-gradient(115deg,#faf8ff,#f4fbfa)}
 .kiko-daily-task>div{min-width:0}.kiko-daily-task small{font-size:8px;letter-spacing:.7px;color:#8176a2;font-weight:800}.kiko-daily-task p{font-size:10px;line-height:1.45;color:#57536b;margin:5px 0 0}.kiko-daily-task>button{flex:none;padding:7px 9px;border-radius:7px;background:#fff;border:1px solid #e6e0f7;color:#6550bd;font-size:9px;font-weight:700}.kiko-daily-task>strong{display:flex;align-items:center;gap:4px;flex:none;color:#19886e;font-size:9px}.kiko-daily-task.completed{background:#f0fbf7;border-color:#d9f1e8}
+.kiko-updates{margin-top:14px;padding-top:12px;border-top:1px solid #f0eef5}
+.kiko-updates-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.kiko-updates-heading>b{font:700 11px Manrope;color:#39344f}
+.kiko-updates-heading>button,.kiko-quick-links>button{display:inline-flex;align-items:center;gap:4px;color:#6853bf;font-size:9px;font-weight:700}
+.kiko-update-row{display:flex;align-items:flex-start;gap:8px;width:100%;padding:8px 7px;text-align:left;border-radius:8px;background:#faf9fd;color:#454157;margin-top:5px}
+.kiko-update-row>span:last-child{display:grid;gap:3px;min-width:0}
+.kiko-update-row b{font-size:9px;line-height:1.35}
+.kiko-update-row small{font-size:8px;line-height:1.4;color:#858294;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.kiko-update-dot{flex:none;width:7px;height:7px;margin-top:3px;border-radius:50%;background:#b6b1c8}
+.kiko-update-dot.unread{background:#7b63da;box-shadow:0 0 0 3px #eee9ff}
+.kiko-update-dot.announcement{background:#52b99a}
+.kiko-no-updates{padding:8px;margin:0;border-radius:8px;background:#faf9fd;color:#858294;font-size:9px}
+.kiko-quick-links{display:flex;gap:8px;margin-top:10px}
+.kiko-quick-links>button{justify-content:center;flex:1;padding:9px 7px;border:1px solid #ece8f7;border-radius:8px;background:#faf9ff}
 .kiko-celebration{padding:9px 10px;margin-top:8px;border-radius:9px;background:#fff8e6;color:#826326;font-size:9px;line-height:1.5;animation:kiko-card-in .25s ease-out both}
 .kiko-focus-nudge{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #e9e4f8;border-radius:10px;background:linear-gradient(115deg,#faf8ff,#f5fbfa)}
 .kiko-focus-nudge>div{display:grid;gap:4px;min-width:0}.kiko-focus-nudge b{font-size:10px;color:#48425f}.kiko-focus-nudge small{font-size:9px;line-height:1.45;color:#818092}.kiko-focus-nudge span{font-size:9px;color:#19886e;font-weight:700}.kiko-focus-nudge button{flex:none;font-size:9px;padding:8px 10px}
@@ -181,7 +195,7 @@
 @keyframes kiko-confetti{from{transform:rotate(-8deg) scale(.92)}to{transform:rotate(8deg) scale(1.08)}}
 @keyframes kiko-tear{0%,100%{transform:translateY(0);opacity:.78}50%{transform:translateY(2px);opacity:1}}
 @keyframes kiko-card-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
-@media(max-width:600px){.kariqo-buddy{right:13px;bottom:14px}.kariqo-buddy-card{width:min(320px,calc(100vw - 26px))}.kariqo-buddy-launch-label{font-size:10px}}
+@media(max-width:600px){.kariqo-buddy{right:13px;bottom:14px}.kariqo-buddy-card{width:min(320px,calc(100vw - 26px))}.kariqo-buddy-launch{width:88px;height:94px}.kariqo-buddy-creature{width:84px;height:90px}.kariqo-buddy-creature .buddy-creature-svg{width:84px;height:90px}}
 @media(prefers-reduced-motion:reduce){.buddy-creature-svg,.buddy-eye,.buddy-star,.buddy-celebration,.buddy-tear,.buddy-shadow,.buddy-tail,.buddy-pet-head,.buddy-arm,.buddy-leg,.kariqo-buddy-card,.kiko-mood-message{animation:none!important}.kariqo-buddy-launch{transition:none}}
 .mentor-attendance-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 16px}.mentor-attendance-summary .panel{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px}.mentor-attendance-summary small{font-size:8px;letter-spacing:.8px;color:#898797;font-weight:700}.mentor-attendance-summary b{grid-row:span 2;font:700 24px Manrope;color:#5f4bc4}.mentor-attendance-summary span{font-size:9px;color:#898797}.mentor-attendance-details{margin-top:12px;border-top:1px solid #f0eff4;padding-top:10px}.mentor-attendance-details summary{font-size:9px;font-weight:700;color:#6651c6;cursor:pointer;list-style:none}.mentor-attendance-details summary::-webkit-details-marker{display:none}.mentor-attendance-list{display:grid;gap:6px;margin-top:8px}.mentor-attendance-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 8px;border-radius:7px;background:#faf9fd}.mentor-attendance-row b,.mentor-attendance-row small{display:block}.mentor-attendance-row b{font-size:9px}.mentor-attendance-row small{font-size:8px;color:#92909f;margin-top:2px}.mentor-attendance-row select{border:1px solid #e7e5ed;background:#fff;border-radius:6px;padding:5px 7px;font-size:9px;color:#575568}.mentor-attendance-row select:disabled{opacity:.55}.mentor-attendance-empty,.mentor-attendance-hint{display:block;font-size:9px!important;color:#898797;margin:8px 0 0!important}.mentor-attendance-hint{color:#9a7929!important}
 @media(max-width:760px){.mentor-attendance-summary{gap:7px}.mentor-attendance-summary .panel{padding:10px}.mentor-attendance-summary small{font-size:7px}.mentor-attendance-summary b{font-size:20px}.mentor-attendance-summary span{font-size:8px}}
