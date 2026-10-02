@@ -112,6 +112,12 @@
 .buddy-curious-mouth{fill:#30294b;stroke:#30294b;stroke-width:1}
 .buddy-curious-brow{stroke-width:1.7}
 .buddy-creature-svg.is-curious .buddy-eye{transform:translateY(-1px);transition:transform .16s ease}
+.kariqo-buddy-launch .buddy-creature-svg.is-curious{animation:kiko-hover-hop .56s ease-in-out infinite}
+.buddy-creature-svg.is-curious .buddy-arm-left{animation:kiko-wave-left .34s ease-in-out infinite alternate}
+.buddy-creature-svg.is-curious .buddy-arm-right{animation:kiko-wave-right .34s ease-in-out infinite alternate}
+.buddy-creature-svg.is-appreciating{animation:kiko-appreciation-hop .82s cubic-bezier(.2,.75,.35,1) both}
+.buddy-creature-svg.is-appreciating .buddy-arm-left{animation:kiko-wave-left .18s ease-in-out 4 alternate}
+.buddy-creature-svg.is-appreciating .buddy-arm-right{animation:kiko-wave-right .18s ease-in-out 4 alternate}
 .kariqo-buddy.is-moving{transition:none;cursor:grabbing}
 .kariqo-buddy.is-moving .kariqo-buddy-launch{cursor:grabbing;touch-action:none;user-select:none}
 .kariqo-buddy.is-moving .buddy-creature-svg{animation:kiko-walk-bob .28s ease-in-out infinite}
@@ -171,6 +177,8 @@
 .kiko-no-updates{padding:8px;margin:0;border-radius:8px;background:#faf9fd;color:#858294;font-size:9px}
 .kiko-quick-links{display:flex;gap:8px;margin-top:10px}
 .kiko-quick-links>button{justify-content:center;flex:1;padding:9px 7px;border:1px solid #ece8f7;border-radius:8px;background:#faf9ff}
+.kiko-hide-button{display:block;margin:10px auto 0;padding:5px 9px;border-radius:7px;color:#858294;font-size:8px}
+.kiko-hide-button:hover{background:#f7f5fb;color:#6250bd}
 .kiko-celebration{padding:9px 10px;margin-top:8px;border-radius:9px;background:#fff8e6;color:#826326;font-size:9px;line-height:1.5;animation:kiko-card-in .25s ease-out both}
 .kiko-focus-nudge{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #e9e4f8;border-radius:10px;background:linear-gradient(115deg,#faf8ff,#f5fbfa)}
 .kiko-focus-nudge>div{display:grid;gap:4px;min-width:0}.kiko-focus-nudge b{font-size:10px;color:#48425f}.kiko-focus-nudge small{font-size:9px;line-height:1.45;color:#818092}.kiko-focus-nudge span{font-size:9px;color:#19886e;font-weight:700}.kiko-focus-nudge button{flex:none;font-size:9px;padding:8px 10px}
@@ -183,6 +191,8 @@
 @keyframes kiko-blink{0%,46%,50%,100%{transform:scaleY(1)}48%{transform:scaleY(.12)}}
 @keyframes kiko-twinkle{0%,100%{opacity:.65;transform:scale(.88)}50%{opacity:1;transform:scale(1.12)}}
 @keyframes kiko-happy-bounce{0%,100%{transform:translateY(0) rotate(-3deg) scale(1)}50%{transform:translateY(-5px) rotate(3deg) scale(1.05)}}
+@keyframes kiko-hover-hop{0%,100%{transform:translateY(0) rotate(-2deg)}45%{transform:translateY(-7px) rotate(1deg)}65%{transform:translateY(-4px) rotate(2deg)}}
+@keyframes kiko-appreciation-hop{0%{transform:translateY(0) scale(1)}28%{transform:translateY(-15px) scale(1.08)}54%{transform:translateY(0) scale(.96)}72%{transform:translateY(-6px) scale(1.03)}100%{transform:translateY(0) scale(1)}}
 @keyframes kiko-head-tilt{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
 @keyframes kiko-tail-wag{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(14deg)}}
 @keyframes kiko-shadow{0%,100%{transform:scaleX(1);opacity:.7}50%{transform:scaleX(.82);opacity:.38}}

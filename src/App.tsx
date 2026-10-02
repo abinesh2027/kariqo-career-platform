@@ -798,7 +798,9 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
   announcements: Record<string, any>[];
 }) {
   const [open, setOpen] = useState(false);
+  const [visible, setVisible] = useState(true);
   const [curious, setCurious] = useState(false);
+  const [appreciating, setAppreciating] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isMoving, setIsMoving] = useState(false);
   const dragOrigin = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
@@ -820,6 +822,20 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
   const roadmapContent = roadmap?.content || {};
   const roadmapTask = String(roadmapContent.next_action || roadmapContent.weeks?.[0]?.activities?.[0] || '').trim();
   const todayTask = roadmapTask || (profile.career_goal ? `Spend 15 minutes building one small skill for ${profile.career_goal}.` : 'Add a career goal, then choose one skill to practise for 15 minutes.');
+
+  useEffect(() => {
+    setVisible(storage.getItem(`kariqo-kiko-hidden:${userId}`) !== 'true');
+    const handleVisibility = (event: Event) => setVisible((event as CustomEvent<boolean>).detail);
+    window.addEventListener('kariqo-kiko-visibility', handleVisibility);
+    return () => window.removeEventListener('kariqo-kiko-visibility', handleVisibility);
+  }, [userId]);
+
+  const appreciateStudent = () => {
+    storage.setItem(taskKey, 'done');
+    setTaskDone(true);
+    setAppreciating(true);
+    window.setTimeout(() => setAppreciating(false), 850);
+  };
 
   useEffect(() => {
     setTaskDone(Boolean(userId && storage.getItem(taskKey) === 'done'));
@@ -845,12 +861,14 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
     return () => clearTimeout(timer);
   }, [newOffer]);
 
+  if (!visible) return null;
+
   return (
     <div className={`kariqo-buddy ${open ? 'is-open' : ''} ${isMoving ? 'is-moving' : ''}`} style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}>
       {open && <section className={`kariqo-buddy-card mood-${mood}`} aria-label="Kiko learning companion">
-        <div className="kariqo-buddy-card-head"><div className={`kariqo-buddy-avatar mood-${mood}`}><BuddyCreature mood={mood} /></div><div><small>KARIQO COMPANION</small><b>Kiko{ name ? ` · Hi ${name}!` : ''}</b></div><button aria-label="Close Kiko" onClick={() => setOpen(false)}><X size={16} /></button></div>
+        <div className="kariqo-buddy-card-head"><div className={`kariqo-buddy-avatar mood-${mood}`}><BuddyCreature mood={mood} appreciating={appreciating} /></div><div><small>KARIQO COMPANION</small><b>Kiko{ name ? ` · Hi ${name}!` : ''}</b></div><button aria-label="Close Kiko" onClick={() => setOpen(false)}><X size={16} /></button></div>
         {newOffer ? <div className="kiko-mood-message excited" role="status"><b>It’s offer time! 🎉</b><span>{newOffer.company_name || 'A company'} sent you an offer for {newOffer.job_title || 'a role'}. Congratulations, {name || 'you'}! Kiko is so proud of you.</span><button onClick={() => { setPage('Job Offers'); setOpen(false); }}>See your offer <ArrowRight size={13} /></button></div> : performanceLow && <div className="kiko-mood-message supportive"><b>That looks like a tough stretch.</b><span>One result doesn’t define you. Let’s pick one small thing to practise — Kiko is cheering you on.</span><button onClick={() => { setPage('AI Roadmap'); setOpen(false); }}>Find one small next step <ArrowRight size={13} /></button></div>}
-        <div className={`kiko-daily-task ${taskDone ? 'completed' : ''}`}><div><small>TODAY’S ROADMAP STEP</small><p>{todayTask}</p></div>{taskDone ? <strong><Check size={13} /> Done!</strong> : <button onClick={() => { storage.setItem(taskKey, 'done'); setTaskDone(true); }}>Mark done</button>}</div>
+        <div className={`kiko-daily-task ${taskDone ? 'completed' : ''}`}><div><small>TODAY’S ROADMAP STEP</small><p>{todayTask}</p></div>{taskDone ? <strong><Check size={13} /> Done!</strong> : <button onClick={appreciateStudent}>Mark done</button>}</div>
         {taskDone && <div className="kiko-celebration" role="status">You showed up for your goal today. Small steps count — Kiko is proud of you! ✨</div>}
         <section className="kiko-updates" aria-label="Recent notifications and announcements">
           <div className="kiko-updates-heading"><b>Quick updates</b><button onClick={() => { setPage('Notifications'); setOpen(false); }}>See all <ArrowRight size={12} /></button></div>
@@ -859,16 +877,17 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
           {!notices.length && !announcements.length && <p className="kiko-no-updates">No new updates right now.</p>}
         </section>
         <div className="kiko-quick-links"><button onClick={() => { setPage('AI Roadmap'); setOpen(false); }}><Compass size={13} /> Roadmap</button><button onClick={() => { setPage('Announcements'); setOpen(false); }}><MessageCircle size={13} /> Announcements</button></div>
+        <button className="kiko-hide-button" onClick={() => { storage.setItem(`kariqo-kiko-hidden:${userId}`, 'true'); setVisible(false); setOpen(false); }}>Hide Kiko</button>
       </section>}
       <button className={`kariqo-buddy-launch mood-${mood}`} aria-label={open ? 'Close Kiko companion' : offerMood ? 'Kiko celebrates your new job offer' : performanceLow ? 'Kiko is here to encourage you' : 'Open Kiko companion'} aria-expanded={open} onMouseEnter={() => setCurious(true)} onMouseLeave={() => setCurious(false)} onPointerDown={(event) => { if (event.button !== 0) return; dragOrigin.current = { x: event.clientX, y: event.clientY, offsetX: dragOffset.x, offsetY: dragOffset.y }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { const origin = dragOrigin.current; if (!origin) return; const dx = event.clientX - origin.x; const dy = event.clientY - origin.y; if (Math.abs(dx) + Math.abs(dy) > 4) wasDragged.current = true; if (wasDragged.current) { setIsMoving(true); setDragOffset({ x: origin.offsetX + dx, y: origin.offsetY + dy }); } }} onPointerUp={() => { dragOrigin.current = null; setIsMoving(false); }} onPointerCancel={() => { dragOrigin.current = null; setIsMoving(false); }} onClick={() => { if (wasDragged.current) { wasDragged.current = false; return; } setOpen(!open); }}>
-        <span className={`kariqo-buddy-creature mood-${mood} ${curious ? 'is-curious' : ''}`}><BuddyCreature mood={mood} curious={curious} /></span>
+        <span className={`kariqo-buddy-creature mood-${mood} ${curious ? 'is-curious' : ''}`}><BuddyCreature mood={mood} curious={curious} appreciating={appreciating} /></span>
       </button>
     </div>
   );
 }
 
-function BuddyCreature({ mood = 'neutral', curious = false }: { mood?: 'neutral' | 'excited' | 'supportive'; curious?: boolean }) {
-  return <svg viewBox="0 0 80 88" role="img" aria-label={`${curious ? 'curious' : mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood} ${curious ? 'is-curious' : ''}`}>
+function BuddyCreature({ mood = 'neutral', curious = false, appreciating = false }: { mood?: 'neutral' | 'excited' | 'supportive'; curious?: boolean; appreciating?: boolean }) {
+  return <svg viewBox="0 0 80 88" role="img" aria-label={`${curious ? 'curious' : mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood} ${curious ? 'is-curious' : ''} ${appreciating ? 'is-appreciating' : ''}`}>
     <ellipse className="buddy-shadow" cx="40" cy="82" rx="18" ry="4" />
     <path className="buddy-tail" d="M52 65c14 1 17 13 8 17-5 2-9-1-9-5 0-2 2-4 4-3" />
     <g className="buddy-pet-body">
@@ -3423,6 +3442,17 @@ function Support({ c }: { c: Ctx }) {
 function Profile({ c }: { c: Ctx }) {
   const p = c.records.profile;
   const prefs = c.records.preferences;
+  const [showKiko, setShowKiko] = useState(() => storage.getItem(`kariqo-kiko-hidden:${c.userId}`) !== 'true');
+
+  useEffect(() => {
+    setShowKiko(storage.getItem(`kariqo-kiko-hidden:${c.userId}`) !== 'true');
+  }, [c.userId]);
+
+  const updateKikoVisibility = (show: boolean) => {
+    setShowKiko(show);
+    storage.setItem(`kariqo-kiko-hidden:${c.userId}`, show ? 'false' : 'true');
+    window.dispatchEvent(new CustomEvent('kariqo-kiko-visibility', { detail: show }));
+  };
 
   const save = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -3512,6 +3542,13 @@ function Profile({ c }: { c: Ctx }) {
                   <b>Mentor and community updates</b>
                 </span>
                 <input name="community_updates" type="checkbox" defaultChecked={prefs.community_updates ?? true} />
+              </label>
+              <label>
+                <span>
+                  <b>Show Kiko companion</b>
+                  <small>Hide or bring back your Kiko pet any time.</small>
+                </span>
+                <input type="checkbox" checked={showKiko} onChange={(event) => updateKikoVisibility(event.target.checked)} />
               </label>
             </div>
           </form>
