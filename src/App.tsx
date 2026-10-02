@@ -884,16 +884,28 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
 }
 
 function BuddyCreature({ mood = 'neutral' }: { mood?: 'neutral' | 'excited' | 'supportive' }) {
-  return <svg viewBox="0 0 64 64" role="img" aria-label={`${mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood}`}>
-    <path className="buddy-ear" d="M17 22 11 9l15 8M47 22l6-13-15 8" />
-    <path className="buddy-body" d="M12 33c0-13 8-22 20-22s20 9 20 22-8 22-20 22-20-9-20-22Z" />
-    <path className="buddy-cheek" d="M17 38c3 2 6 2 9 0M38 38c3 2 6 2 9 0" />
-    {mood === 'supportive' && <path className="buddy-brow" d="m21 25 6 1M37 26l6-1" />}
-    <ellipse className="buddy-eye" cx="25" cy="30" rx="2.3" ry={mood === 'excited' ? '4' : '3.2'} />
-    <ellipse className="buddy-eye" cx="39" cy="30" rx="2.3" ry={mood === 'excited' ? '4' : '3.2'} />
-    {mood === 'excited' ? <path className="buddy-smile" d="M26 36c3 6 9 6 12 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M27 41c3-4 7-4 10 0" /> : <path className="buddy-smile" d="M28 38c2.5 3 5.5 3 8 0" />}
-    {mood === 'supportive' && <path className="buddy-tear" d="M43 37c0 2-2 3-2 4a2 2 0 0 0 4 0c0-1-2-2-2-4Z" />}
-    {mood === 'excited' ? <g className="buddy-celebration"><path d="m32 1 1.7 4.1L38 7l-4.3 1.8L32 13l-1.7-4.2L26 7l4.3-1.9L32 1ZM8 22l1.1 2.5 2.5 1.1-2.5 1.1L8 29l-1.1-2.3-2.5-1.1 2.5-1.1L8 22ZM56 17l1.1 2.5 2.5 1.1-2.5 1.1L56 24l-1.1-2.3-2.5-1.1 2.5-1.1L56 17Z" /></g> : <path className="buddy-star" d="m32 3 1.4 3.1 3.1 1.4-3.1 1.4L32 13l-1.4-3.1-3.1-1.4 3.1-1.4L32 3Z" />}
+  return <svg viewBox="0 0 80 88" role="img" aria-label={`${mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood}`}>
+    <ellipse className="buddy-shadow" cx="40" cy="82" rx="18" ry="4" />
+    <path className="buddy-tail" d="M52 65c14 1 17 13 8 17-5 2-9-1-9-5 0-2 2-4 4-3" />
+    <g className="buddy-pet-body">
+      <path className="buddy-leg" d="M31 69v7c-5 1-7 3-6 6 1 2 9 2 13 0v-8M47 69v7c5 1 7 3 6 6-1 2-9 2-13 0v-8" />
+      <ellipse className="buddy-tummy" cx="40" cy="64" rx="17" ry="18" />
+      <path className="buddy-arm buddy-arm-left" d="M26 54c-7 2-9 8-7 13 1 3 4 4 7 2l7-8" />
+      <path className="buddy-arm buddy-arm-right" d="M54 54c7 2 9 8 7 13-1 3-4 4-7 2l-7-8" />
+      <path className="buddy-belly" d="M31 63c0-7 4-11 9-11s9 4 9 11v8H31Z" />
+      <path className="buddy-paw" d="M21 65c-3 0-5 2-4 5s6 3 9 0l1-3M59 65c3 0 5 2 4 5s-6 3-9 0l-1-3" />
+    </g>
+    <g className="buddy-pet-head">
+      <path className="buddy-ear" d="M22 25 17 9l16 9M58 25l5-16-16 9" />
+      <path className="buddy-body" d="M15 34c0-15 10-25 25-25s25 10 25 25-10 26-25 26-25-11-25-26Z" />
+      <path className="buddy-cheek" d="M21 42c4 2 7 2 10 0M49 42c3 2 6 2 10 0" />
+      {mood === 'supportive' && <path className="buddy-brow" d="m24 28 7 2M49 30l7-2" />}
+      <ellipse className="buddy-eye" cx="31" cy="34" rx="2.7" ry={mood === 'excited' ? '4.4' : '3.8'} />
+      <ellipse className="buddy-eye" cx="49" cy="34" rx="2.7" ry={mood === 'excited' ? '4.4' : '3.8'} />
+      {mood === 'excited' ? <path className="buddy-smile" d="M30 42c4 7 16 7 20 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M32 48c4-5 12-5 16 0" /> : <path className="buddy-smile" d="M34 43c3 4 9 4 12 0" />}
+      {mood === 'supportive' && <path className="buddy-tear" d="M58 43c0 2-2 3-2 5a2 2 0 0 0 4 0c0-2-2-3-2-5Z" />}
+      {mood === 'excited' ? <g className="buddy-celebration"><path d="m40 1 2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5ZM8 26l1.3 3 3 1.3-3 1.3L8 35l-1.3-3.4-3-1.3 3-1.3L8 26ZM72 19l1.3 3 3 1.3-3 1.3L72 28l-1.3-3.4-3-1.3 3-1.3L72 19Z" /></g> : <path className="buddy-star" d="m40 4 1.5 3.5L45 9l-3.5 1.5L40 14l-1.5-3.5L35 9l3.5-1.5L40 4Z" />}
+    </g>
   </svg>;
 }
 
