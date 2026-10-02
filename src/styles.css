@@ -106,6 +106,21 @@
 .buddy-cheek{fill:none;stroke:#ffb1c7;stroke-width:2.2;stroke-linecap:round;opacity:.88}
 .buddy-smile{fill:none;stroke:#30294b;stroke-width:1.8;stroke-linecap:round}
 .buddy-star{fill:#ffd66e;animation:kiko-twinkle 2.7s ease-in-out infinite}
+.buddy-brow{fill:none;stroke:#30294b;stroke-width:1.8;stroke-linecap:round}
+.buddy-tear{fill:#72c6db;animation:kiko-tear 1.8s ease-in-out infinite}
+.buddy-celebration{fill:#ffc75d;animation:kiko-confetti .8s ease-in-out infinite alternate;transform-origin:center}
+.buddy-creature-svg.mood-excited{animation:kiko-happy-bounce .65s ease-in-out infinite}
+.buddy-creature-svg.mood-excited .buddy-eye{animation:kiko-happy-blink 2.4s ease-in-out infinite}
+.kariqo-buddy-launch.mood-excited{border-color:#f3d88f;background:linear-gradient(110deg,#fffdf5,#fff7e5);color:#75521a}
+.kariqo-buddy-launch.mood-supportive{border-color:#d9e6f6;background:linear-gradient(110deg,#fbfcff,#f1f6ff);color:#52617d}
+.kariqo-buddy-avatar.mood-excited,.kariqo-buddy-creature.mood-excited{background:linear-gradient(145deg,#fff2c9,#ffe2c0)}
+.kariqo-buddy-avatar.mood-supportive,.kariqo-buddy-creature.mood-supportive{background:linear-gradient(145deg,#e8f1ff,#eceaff)}
+.kiko-mood-message{display:grid;gap:6px;margin-top:12px;padding:11px 12px;border:1px solid;border-radius:11px;animation:kiko-card-in .24s ease-out both}
+.kiko-mood-message b{font:700 11px Manrope}
+.kiko-mood-message span{font-size:10px;line-height:1.55}
+.kiko-mood-message button{display:inline-flex;align-items:center;gap:5px;justify-self:start;margin-top:2px;padding:7px 9px;border-radius:7px;background:#ffffffc9;font-size:9px;font-weight:700}
+.kiko-mood-message.excited{border-color:#f3e2b4;background:linear-gradient(115deg,#fffaf0,#fff2df);color:#74531d}
+.kiko-mood-message.supportive{border-color:#dfe7f6;background:linear-gradient(115deg,#f7f9ff,#f2f5ff);color:#4f5e78}
 .kariqo-buddy-card{width:min(330px,calc(100vw - 30px));padding:15px;border:1px solid #ece8f7;border-radius:17px;background:#fff;box-shadow:0 18px 50px #26203b24;animation:kiko-card-in .2s ease-out both}
 .kariqo-buddy-card-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid #f0eef5}
 .kariqo-buddy-card-head>div:nth-child(2){flex:1;min-width:0}
@@ -132,9 +147,13 @@
 @keyframes kiko-bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-3px) rotate(2deg)}}
 @keyframes kiko-blink{0%,46%,50%,100%{transform:scaleY(1)}48%{transform:scaleY(.12)}}
 @keyframes kiko-twinkle{0%,100%{opacity:.65;transform:scale(.88)}50%{opacity:1;transform:scale(1.12)}}
+@keyframes kiko-happy-bounce{0%,100%{transform:translateY(0) rotate(-3deg) scale(1)}50%{transform:translateY(-5px) rotate(3deg) scale(1.05)}}
+@keyframes kiko-happy-blink{0%,42%,48%,100%{transform:scaleY(1)}45%{transform:scaleY(.15)}}
+@keyframes kiko-confetti{from{transform:rotate(-8deg) scale(.92)}to{transform:rotate(8deg) scale(1.08)}}
+@keyframes kiko-tear{0%,100%{transform:translateY(0);opacity:.78}50%{transform:translateY(2px);opacity:1}}
 @keyframes kiko-card-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:600px){.kariqo-buddy{right:13px;bottom:14px}.kariqo-buddy-card{width:min(320px,calc(100vw - 26px))}.kariqo-buddy-launch-label{font-size:10px}}
-@media(prefers-reduced-motion:reduce){.buddy-creature-svg,.buddy-eye,.buddy-star,.kariqo-buddy-card{animation:none!important}.kariqo-buddy-launch{transition:none}}
+@media(prefers-reduced-motion:reduce){.buddy-creature-svg,.buddy-eye,.buddy-star,.buddy-celebration,.buddy-tear,.kariqo-buddy-card,.kiko-mood-message{animation:none!important}.kariqo-buddy-launch{transition:none}}
 .mentor-attendance-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 16px}.mentor-attendance-summary .panel{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px}.mentor-attendance-summary small{font-size:8px;letter-spacing:.8px;color:#898797;font-weight:700}.mentor-attendance-summary b{grid-row:span 2;font:700 24px Manrope;color:#5f4bc4}.mentor-attendance-summary span{font-size:9px;color:#898797}.mentor-attendance-details{margin-top:12px;border-top:1px solid #f0eff4;padding-top:10px}.mentor-attendance-details summary{font-size:9px;font-weight:700;color:#6651c6;cursor:pointer;list-style:none}.mentor-attendance-details summary::-webkit-details-marker{display:none}.mentor-attendance-list{display:grid;gap:6px;margin-top:8px}.mentor-attendance-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 8px;border-radius:7px;background:#faf9fd}.mentor-attendance-row b,.mentor-attendance-row small{display:block}.mentor-attendance-row b{font-size:9px}.mentor-attendance-row small{font-size:8px;color:#92909f;margin-top:2px}.mentor-attendance-row select{border:1px solid #e7e5ed;background:#fff;border-radius:6px;padding:5px 7px;font-size:9px;color:#575568}.mentor-attendance-row select:disabled{opacity:.55}.mentor-attendance-empty,.mentor-attendance-hint{display:block;font-size:9px!important;color:#898797;margin:8px 0 0!important}.mentor-attendance-hint{color:#9a7929!important}
 @media(max-width:760px){.mentor-attendance-summary{gap:7px}.mentor-attendance-summary .panel{padding:10px}.mentor-attendance-summary small{font-size:7px}.mentor-attendance-summary b{font-size:20px}.mentor-attendance-summary span{font-size:8px}}
 .student-attendance-panel{margin-bottom:16px}.student-attendance-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.student-attendance-head small{font-size:8px;letter-spacing:.8px;color:#877bb0;font-weight:700}.student-attendance-head h2{font:700 16px Manrope;margin:5px 0}.student-attendance-head p{font-size:9px;color:#898797;margin:0}.student-attendance-head button{white-space:nowrap;font-size:9px;padding:7px 9px}.student-attendance-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.student-attendance-metrics>div{border:1px solid #eeedf3;background:#fbfaff;border-radius:8px;padding:10px}.student-attendance-metrics small,.student-attendance-metrics b{display:block}.student-attendance-metrics small{font-size:8px;color:#898797;letter-spacing:.5px}.student-attendance-metrics b{font:700 19px Manrope;color:#6250c4;margin-top:4px}.student-attendance-list{display:grid;gap:6px}.student-attendance-list article{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #f0eff4;padding:9px 2px}.student-attendance-list article b,.student-attendance-list article small{display:block}.student-attendance-list article b{font-size:10px}.student-attendance-list article small{font-size:8px;color:#898797;margin-top:3px}.student-attendance-status{font-size:8px;border-radius:20px;padding:5px 8px;background:#f1eff6;color:#797687;white-space:nowrap}.student-attendance-status.present{background:#e6f6f1;color:#208c73}.student-attendance-status.late{background:#fff4df;color:#a7731f}.student-attendance-status.absent{background:#fff0f0;color:#bd5454}.student-attendance-status.excused{background:#eef4ff;color:#5577b5}.student-attendance-empty{padding:12px;border:1px dashed #e7e5ed;border-radius:8px;color:#898797;font-size:9px}

@@ -735,7 +735,7 @@ export default function App() {
           </span>
       </footer>
 
-      <KariqoBuddy page={page} profile={records.profile} projects={records.projects.length} skills={records.skills.length} roadmap={records.roadmaps[0]} userId={userId} setPage={setPage} />
+      <KariqoBuddy page={page} profile={records.profile} projects={records.projects.length} skills={records.skills.length} roadmap={records.roadmaps[0]} userId={userId} setPage={setPage} offers={records.jobOffers} skillScores={records.skills} assignmentScores={records.assignmentScores} />
       </main>
 
       {toast && (
@@ -759,7 +759,7 @@ export default function App() {
   );
 }
 
-function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage }: {
+function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage, offers, skillScores, assignmentScores }: {
   page: Page;
   profile: Record<string, any>;
   projects: number;
@@ -767,9 +767,21 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
   roadmap?: Record<string, any>;
   userId: string;
   setPage: (page: Page) => void;
+  offers: Record<string, any>[];
+  skillScores: Record<string, any>[];
+  assignmentScores: Record<string, any>[];
 }) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [newOffer, setNewOffer] = useState<Record<string, any> | null>(null);
+  const latestOffer = offers[0];
+  const offerMood = Boolean(newOffer);
+  const scoredAssignments = assignmentScores.map((item) => Number(item.score)).filter(Number.isFinite);
+  const selfRatedSkills = skillScores.map((item) => Number(item.score)).filter(Number.isFinite);
+  const performanceLow = scoredAssignments.length
+    ? scoredAssignments.reduce((sum, score) => sum + score, 0) / scoredAssignments.length < 50
+    : selfRatedSkills.length >= 2 && selfRatedSkills.reduce((sum, score) => sum + score, 0) / selfRatedSkills.length < 40;
+  const mood: 'neutral' | 'excited' | 'supportive' = offerMood ? 'excited' : performanceLow ? 'supportive' : 'neutral';
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const taskKey = `kariqo-kiko-task:${userId}:${todayKey}`;
@@ -782,6 +794,27 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
   useEffect(() => {
     setTaskDone(Boolean(userId && storage.getItem(taskKey) === 'done'));
   }, [taskKey, userId]);
+
+  useEffect(() => {
+    if (!userId || !latestOffer?.id) return;
+    const seenKey = `kariqo-kiko-last-offer:${userId}`;
+    const previouslySeen = storage.getItem(seenKey);
+    storage.setItem(seenKey, String(latestOffer.id));
+    if (previouslySeen === String(latestOffer.id)) return;
+
+    const isRecent = Date.now() - new Date(latestOffer.created_at || 0).getTime() <= 7 * 24 * 60 * 60 * 1000;
+    if (!previouslySeen && !isRecent) return;
+
+    setNewOffer(latestOffer);
+    setOpen(true);
+    setDismissed(true);
+  }, [latestOffer?.id, userId]);
+
+  useEffect(() => {
+    if (!newOffer) return;
+    const timer = setTimeout(() => setNewOffer(null), 12000);
+    return () => clearTimeout(timer);
+  }, [newOffer]);
 
   const guidance: Record<Page, { title: string; message: string; action: Page; actionLabel: string }> = {
     Overview: profile.career_goal
@@ -807,29 +840,33 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
 
   return (
     <div className={`kariqo-buddy ${open ? 'is-open' : ''}`}>
-      {open && <section className="kariqo-buddy-card" aria-label="Kiko learning companion">
-        <div className="kariqo-buddy-card-head"><div className="kariqo-buddy-avatar"><BuddyCreature /></div><div><small>KARIQO COMPANION</small><b>Kiko{ name ? ` · Hi ${name}!` : ''}</b></div><button aria-label="Close Kiko" onClick={() => setOpen(false)}><X size={16} /></button></div>
+      {open && <section className={`kariqo-buddy-card mood-${mood}`} aria-label="Kiko learning companion">
+        <div className="kariqo-buddy-card-head"><div className={`kariqo-buddy-avatar mood-${mood}`}><BuddyCreature mood={mood} /></div><div><small>KARIQO COMPANION</small><b>Kiko{ name ? ` · Hi ${name}!` : ''}</b></div><button aria-label="Close Kiko" onClick={() => setOpen(false)}><X size={16} /></button></div>
+        {newOffer ? <div className="kiko-mood-message excited" role="status"><b>It’s offer time! 🎉</b><span>{newOffer.company_name || 'A company'} sent you an offer for {newOffer.job_title || 'a role'}. Congratulations, {name || 'you'}! Kiko is so proud of you.</span><button onClick={() => { setPage('Job Offers'); setOpen(false); }}>See your offer <ArrowRight size={13} /></button></div> : performanceLow && <div className="kiko-mood-message supportive"><b>That looks like a tough stretch.</b><span>One result doesn’t define you. Let’s pick one small thing to practise — Kiko is cheering you on.</span><button onClick={() => { setPage('AI Roadmap'); setOpen(false); }}>Find one small next step <ArrowRight size={13} /></button></div>}
         <div className={`kiko-daily-task ${taskDone ? 'completed' : ''}`}><div><small>TODAY’S ROADMAP STEP</small><p>{todayTask}</p></div>{taskDone ? <strong><Check size={13} /> Done!</strong> : <button onClick={() => { storage.setItem(taskKey, 'done'); setTaskDone(true); }}>Mark done</button>}</div>
         {taskDone && <div className="kiko-celebration" role="status">You showed up for your goal today. Small steps count — Kiko is proud of you! ✨</div>}
         <div className="kariqo-buddy-tip"><span>YOUR TIP FOR {page.toUpperCase()}</span><h3>{tip.title}</h3><p>{tip.message}</p></div>
         <button className="primary kariqo-buddy-action" onClick={() => { setPage(tip.action); setOpen(false); }}>{tip.actionLabel}<ArrowRight size={14} /></button>
         <small className="kariqo-buddy-note">Helpful prompts based on your Kariqo workspace · not a substitute for mentor advice</small>
       </section>}
-      <button className="kariqo-buddy-launch" aria-label={open ? 'Close Kiko companion' : 'Open Kiko companion'} aria-expanded={open} onClick={() => { setOpen(!open); setDismissed(true); }}>
-        <span className="kariqo-buddy-creature"><BuddyCreature /></span><span className="kariqo-buddy-launch-label">{open ? 'Close' : dismissed ? 'Kiko' : 'Need a nudge?'}</span>
+      <button className={`kariqo-buddy-launch mood-${mood}`} aria-label={open ? 'Close Kiko companion' : offerMood ? 'Kiko celebrates your new job offer' : performanceLow ? 'Kiko is here to encourage you' : 'Open Kiko companion'} aria-expanded={open} onClick={() => { setOpen(!open); setDismissed(true); }}>
+        <span className={`kariqo-buddy-creature mood-${mood}`}><BuddyCreature mood={mood} /></span><span className="kariqo-buddy-launch-label">{open ? 'Close' : offerMood ? 'Offer news!' : performanceLow ? 'You’ve got this' : dismissed ? 'Kiko' : 'Need a nudge?'}</span>
       </button>
     </div>
   );
 }
 
-function BuddyCreature() {
-  return <svg viewBox="0 0 64 64" role="img" aria-label="Kiko mascot" className="buddy-creature-svg">
+function BuddyCreature({ mood = 'neutral' }: { mood?: 'neutral' | 'excited' | 'supportive' }) {
+  return <svg viewBox="0 0 64 64" role="img" aria-label={`${mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood}`}>
     <path className="buddy-ear" d="M17 22 11 9l15 8M47 22l6-13-15 8" />
     <path className="buddy-body" d="M12 33c0-13 8-22 20-22s20 9 20 22-8 22-20 22-20-9-20-22Z" />
     <path className="buddy-cheek" d="M17 38c3 2 6 2 9 0M38 38c3 2 6 2 9 0" />
-    <ellipse className="buddy-eye" cx="25" cy="30" rx="2.3" ry="3.2" /><ellipse className="buddy-eye" cx="39" cy="30" rx="2.3" ry="3.2" />
-    <path className="buddy-smile" d="M28 38c2.5 3 5.5 3 8 0" />
-    <path className="buddy-star" d="m32 3 1.4 3.1 3.1 1.4-3.1 1.4L32 13l-1.4-3.1-3.1-1.4 3.1-1.4L32 3Z" />
+    {mood === 'supportive' && <path className="buddy-brow" d="m21 25 6 1M37 26l6-1" />}
+    <ellipse className="buddy-eye" cx="25" cy="30" rx="2.3" ry={mood === 'excited' ? '4' : '3.2'} />
+    <ellipse className="buddy-eye" cx="39" cy="30" rx="2.3" ry={mood === 'excited' ? '4' : '3.2'} />
+    {mood === 'excited' ? <path className="buddy-smile" d="M26 36c3 6 9 6 12 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M27 41c3-4 7-4 10 0" /> : <path className="buddy-smile" d="M28 38c2.5 3 5.5 3 8 0" />}
+    {mood === 'supportive' && <path className="buddy-tear" d="M43 37c0 2-2 3-2 4a2 2 0 0 0 4 0c0-1-2-2-2-4Z" />}
+    {mood === 'excited' ? <g className="buddy-celebration"><path d="m32 1 1.7 4.1L38 7l-4.3 1.8L32 13l-1.7-4.2L26 7l4.3-1.9L32 1ZM8 22l1.1 2.5 2.5 1.1-2.5 1.1L8 29l-1.1-2.3-2.5-1.1 2.5-1.1L8 22ZM56 17l1.1 2.5 2.5 1.1-2.5 1.1L56 24l-1.1-2.3-2.5-1.1 2.5-1.1L56 17Z" /></g> : <path className="buddy-star" d="m32 3 1.4 3.1 3.1 1.4-3.1 1.4L32 13l-1.4-3.1-3.1-1.4 3.1-1.4L32 3Z" />}
   </svg>;
 }
 
