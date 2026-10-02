@@ -550,6 +550,33 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const client = supabase;
+    if (!client || auth || accountType !== 'student' || !userId) return;
+    let active = true;
+    const syncOffers = async () => {
+      if (!active || document.visibilityState !== 'visible') return;
+      const { data, error } = await client
+        .from('skillora_job_offers')
+        .select('id,status,match_score,created_at,company_name,job_title,job_location')
+        .eq('student_id', userId)
+        .order('created_at', { ascending: false });
+      if (!active || error) return;
+      setRecords((current) => ({ ...current, jobOffers: data || [] }));
+    };
+    const onFocus = () => void syncOffers();
+    const onVisibilityChange = () => { if (document.visibilityState === 'visible') void syncOffers(); };
+    const timer = window.setInterval(() => void syncOffers(), 60_000);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [accountType, auth, userId]);
+
   const saveProfile = async (patch: Record<string, unknown>) => {
     if (!supabase || !userId) return;
     const { error } = await supabase.from('profiles').upsert({ id: userId, ...patch });
