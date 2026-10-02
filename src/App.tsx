@@ -800,6 +800,11 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
 }) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [curious, setCurious] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isMoving, setIsMoving] = useState(false);
+  const dragOrigin = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
+  const wasDragged = useRef(false);
   const [newOffer, setNewOffer] = useState<Record<string, any> | null>(null);
   const latestOffer = offers[0];
   const offerMood = Boolean(newOffer);
@@ -866,7 +871,7 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
   const tip = guidance[page];
 
   return (
-    <div className={`kariqo-buddy ${open ? 'is-open' : ''}`}>
+    <div className={`kariqo-buddy ${open ? 'is-open' : ''} ${isMoving ? 'is-moving' : ''}`} style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}>
       {open && <section className={`kariqo-buddy-card mood-${mood}`} aria-label="Kiko learning companion">
         <div className="kariqo-buddy-card-head"><div className={`kariqo-buddy-avatar mood-${mood}`}><BuddyCreature mood={mood} /></div><div><small>KARIQO COMPANION</small><b>Kiko{ name ? ` · Hi ${name}!` : ''}</b></div><button aria-label="Close Kiko" onClick={() => setOpen(false)}><X size={16} /></button></div>
         {newOffer ? <div className="kiko-mood-message excited" role="status"><b>It’s offer time! 🎉</b><span>{newOffer.company_name || 'A company'} sent you an offer for {newOffer.job_title || 'a role'}. Congratulations, {name || 'you'}! Kiko is so proud of you.</span><button onClick={() => { setPage('Job Offers'); setOpen(false); }}>See your offer <ArrowRight size={13} /></button></div> : performanceLow && <div className="kiko-mood-message supportive"><b>That looks like a tough stretch.</b><span>One result doesn’t define you. Let’s pick one small thing to practise — Kiko is cheering you on.</span><button onClick={() => { setPage('AI Roadmap'); setOpen(false); }}>Find one small next step <ArrowRight size={13} /></button></div>}
@@ -876,19 +881,20 @@ function KariqoBuddy({ page, profile, projects, skills, roadmap, userId, setPage
         <button className="primary kariqo-buddy-action" onClick={() => { setPage(tip.action); setOpen(false); }}>{tip.actionLabel}<ArrowRight size={14} /></button>
         <small className="kariqo-buddy-note">Helpful prompts based on your Kariqo workspace · not a substitute for mentor advice</small>
       </section>}
-      <button className={`kariqo-buddy-launch mood-${mood}`} aria-label={open ? 'Close Kiko companion' : offerMood ? 'Kiko celebrates your new job offer' : performanceLow ? 'Kiko is here to encourage you' : 'Open Kiko companion'} aria-expanded={open} onClick={() => { setOpen(!open); setDismissed(true); }}>
-        <span className={`kariqo-buddy-creature mood-${mood}`}><BuddyCreature mood={mood} /></span><span className="kariqo-buddy-launch-label">{open ? 'Close' : offerMood ? 'Offer news!' : performanceLow ? 'You’ve got this' : dismissed ? 'Kiko' : 'Need a nudge?'}</span>
+      <button className={`kariqo-buddy-launch mood-${mood}`} aria-label={open ? 'Close Kiko companion' : offerMood ? 'Kiko celebrates your new job offer' : performanceLow ? 'Kiko is here to encourage you' : 'Open Kiko companion'} aria-expanded={open} onMouseEnter={() => setCurious(true)} onMouseLeave={() => setCurious(false)} onPointerDown={(event) => { if (event.button !== 0) return; dragOrigin.current = { x: event.clientX, y: event.clientY, offsetX: dragOffset.x, offsetY: dragOffset.y }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { const origin = dragOrigin.current; if (!origin) return; const dx = event.clientX - origin.x; const dy = event.clientY - origin.y; if (Math.abs(dx) + Math.abs(dy) > 4) wasDragged.current = true; if (wasDragged.current) { setIsMoving(true); setDragOffset({ x: origin.offsetX + dx, y: origin.offsetY + dy }); } }} onPointerUp={() => { dragOrigin.current = null; setIsMoving(false); }} onPointerCancel={() => { dragOrigin.current = null; setIsMoving(false); }} onClick={() => { if (wasDragged.current) { wasDragged.current = false; return; } setOpen(!open); setDismissed(true); }}>
+        <span className={`kariqo-buddy-creature mood-${mood} ${curious ? 'is-curious' : ''}`}><BuddyCreature mood={mood} curious={curious} /></span><span className="kariqo-buddy-launch-label">{open ? 'Close' : offerMood ? 'Offer news!' : performanceLow ? 'You’ve got this' : dismissed ? 'Kiko' : 'Need a nudge?'}</span>
       </button>
     </div>
   );
 }
 
-function BuddyCreature({ mood = 'neutral' }: { mood?: 'neutral' | 'excited' | 'supportive' }) {
-  return <svg viewBox="0 0 80 88" role="img" aria-label={`${mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood}`}>
+function BuddyCreature({ mood = 'neutral', curious = false }: { mood?: 'neutral' | 'excited' | 'supportive'; curious?: boolean }) {
+  return <svg viewBox="0 0 80 88" role="img" aria-label={`${curious ? 'curious' : mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood} ${curious ? 'is-curious' : ''}`}>
     <ellipse className="buddy-shadow" cx="40" cy="82" rx="18" ry="4" />
     <path className="buddy-tail" d="M52 65c14 1 17 13 8 17-5 2-9-1-9-5 0-2 2-4 4-3" />
     <g className="buddy-pet-body">
-      <path className="buddy-leg" d="M31 69v7c-5 1-7 3-6 6 1 2 9 2 13 0v-8M47 69v7c5 1 7 3 6 6-1 2-9 2-13 0v-8" />
+      <path className="buddy-leg buddy-leg-left" d="M31 69v7c-5 1-7 3-6 6 1 2 9 2 13 0v-8" />
+      <path className="buddy-leg buddy-leg-right" d="M47 69v7c5 1 7 3 6 6-1 2-9 2-13 0v-8" />
       <ellipse className="buddy-tummy" cx="40" cy="64" rx="17" ry="18" />
       <path className="buddy-arm buddy-arm-left" d="M26 54c-7 2-9 8-7 13 1 3 4 4 7 2l7-8" />
       <path className="buddy-arm buddy-arm-right" d="M54 54c7 2 9 8 7 13-1 3-4 4-7 2l-7-8" />
@@ -900,9 +906,10 @@ function BuddyCreature({ mood = 'neutral' }: { mood?: 'neutral' | 'excited' | 's
       <path className="buddy-body" d="M15 34c0-15 10-25 25-25s25 10 25 25-10 26-25 26-25-11-25-26Z" />
       <path className="buddy-cheek" d="M21 42c4 2 7 2 10 0M49 42c3 2 6 2 10 0" />
       {mood === 'supportive' && <path className="buddy-brow" d="m24 28 7 2M49 30l7-2" />}
-      <ellipse className="buddy-eye" cx="31" cy="34" rx="2.7" ry={mood === 'excited' ? '4.4' : '3.8'} />
-      <ellipse className="buddy-eye" cx="49" cy="34" rx="2.7" ry={mood === 'excited' ? '4.4' : '3.8'} />
-      {mood === 'excited' ? <path className="buddy-smile" d="M30 42c4 7 16 7 20 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M32 48c4-5 12-5 16 0" /> : <path className="buddy-smile" d="M34 43c3 4 9 4 12 0" />}
+      {curious && mood === 'neutral' && <path className="buddy-brow buddy-curious-brow" d="m24 28 7-2M49 26l7 2" />}
+      <ellipse className="buddy-eye" cx="31" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : '3.8'} />
+      <ellipse className="buddy-eye" cx="49" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : '3.8'} />
+      {mood === 'excited' ? <path className="buddy-smile" d="M30 42c4 7 16 7 20 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M32 48c4-5 12-5 16 0" /> : curious ? <ellipse className="buddy-curious-mouth" cx="40" cy="44" rx="3" ry="4" /> : <path className="buddy-smile" d="M34 43c3 4 9 4 12 0" />}
       {mood === 'supportive' && <path className="buddy-tear" d="M58 43c0 2-2 3-2 5a2 2 0 0 0 4 0c0-2-2-3-2-5Z" />}
       {mood === 'excited' ? <g className="buddy-celebration"><path d="m40 1 2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5ZM8 26l1.3 3 3 1.3-3 1.3L8 35l-1.3-3.4-3-1.3 3-1.3L8 26ZM72 19l1.3 3 3 1.3-3 1.3L72 28l-1.3-3.4-3-1.3 3-1.3L72 19Z" /></g> : <path className="buddy-star" d="m40 4 1.5 3.5L45 9l-3.5 1.5L40 14l-1.5-3.5L35 9l3.5-1.5L40 4Z" />}
     </g>
