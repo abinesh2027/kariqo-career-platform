@@ -1529,7 +1529,7 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
           </Panel>
         </div>
       </main>
-      {activeRoom && <LiveClassRoom roomId={activeRoom.id} title={activeRoom.title} displayName={user} onClose={() => setActiveRoom(null)} />}
+      {activeRoom && <LiveClassRoom roomId={activeRoom.id} title={activeRoom.title} displayName={user} isHost onClose={() => setActiveRoom(null)} />}
       {toast && <div className={`toast ${toast.type}`}><Check size={15} /> {toast.msg}</div>}
     </div>
   );
@@ -3199,7 +3199,7 @@ function Classes({ c }: { c: Ctx }) {
   );
 }
 
-function LiveClassRoom({ roomId, title, displayName, onClose }: { roomId: string; title: string; displayName: string; onClose: () => void }) {
+function LiveClassRoom({ roomId, title, displayName, isHost = false, onClose }: { roomId: string; title: string; displayName: string; isHost?: boolean; onClose: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const [status, setStatus] = useState('Connecting to the class room…');
@@ -3243,9 +3243,10 @@ function LiveClassRoom({ roomId, title, displayName, onClose }: { roomId: string
       api?.dispose();
     };
   }, [roomId, displayName]);
+  const roomUrl = `https://meet.jit.si/Kariqo-${roomId.replace(/[^a-zA-Z0-9-]/g, '')}`;
   return <div className="live-room-shade" role="dialog" aria-modal="true" aria-label={`${title} live class`}>
     <section className="live-room-panel">
-      <header><div><small>KARIQO LIVE CLASS</small><h2>{title}</h2><p>{status}</p></div><button className="secondary" onClick={onClose} aria-label="Leave class"><X size={16} /> Leave</button></header>
+      <header><div><small>KARIQO LIVE CLASS</small><h2>{title}</h2><p>{status}</p></div><div className="live-room-actions">{isHost && <a className="secondary" href={roomUrl} target="_blank" rel="noopener noreferrer">Host sign-in in browser</a>}<button className="secondary" onClick={onClose} aria-label="Leave class"><X size={16} /> Leave</button></div></header>
       <div className="live-room-frame" ref={containerRef} />
       <footer>Audio and video are off when you join. Allow browser camera/microphone access only if you want to speak or show video.</footer>
     </section>
