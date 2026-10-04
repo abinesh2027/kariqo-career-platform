@@ -12,16 +12,17 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { ...corsHeaders, 'Content-Type': 'application/json' },
 });
 
-function getAdmin() {
-  return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+function getUserClient(req: Request) {
+  const authorization = req.headers.get('Authorization');
+  if (!authorization) return null;
+  return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: authorization } },
+  });
 }
 
 async function getSignedInUser(req: Request) {
-  const authorization = req.headers.get('Authorization');
-  if (!authorization) return null;
-  const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: authorization } },
-  });
+  const client = getUserClient(req);
+  if (!client) return null;
   const { data: { user }, error } = await client.auth.getUser();
   return error ? null : user;
 }
@@ -62,8 +63,10 @@ serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST required' }, 405);
 
   try {
+    const db = getUserClient(req);
     const user = await getSignedInUser(req);
     if (!user) return json({ error: 'Sign in again to join this class.' }, 401);
+    if (!db) return json({ error: 'Sign in again to join this class.' }, 401);
 
     let input: { classId?: unknown };
     try { input = await req.json(); } catch { return json({ error: 'Class details are missing.' }, 400); }
@@ -79,8 +82,7 @@ serve(async (req) => {
       return json({ error: 'Live classes are still being configured. Try again shortly.' }, 503);
     }
 
-    const admin = getAdmin();
-    const { data: liveClass, error: classError } = await admin.from('live_classes')
+    const { data: liveClass, error: classError } = await db.from('live_classes')
       .select('id,title,instructor_id,published').eq('id', input.classId).maybeSingle();
     if (classError) {
       console.error('JaaS live class lookup failed', classError.message);
@@ -91,7 +93,7 @@ serve(async (req) => {
     const isMentor = liveClass.instructor_id === user.id;
     if (!isMentor) {
       if (!liveClass.published) return json({ error: 'This class is not available to students.' }, 403);
-      const { data: registration, error: registrationError } = await admin.from('class_registrations')
+      const { data: registration, error: registrationError } = await db.from('class_registrations')
         .select('id').eq('class_id', liveClass.id).eq('user_id', user.id).maybeSingle();
       if (registrationError) {
         console.error('JaaS class registration lookup failed', registrationError.message);
@@ -100,7 +102,7 @@ serve(async (req) => {
       if (!registration) return json({ error: 'Register for this class before joining.' }, 403);
     }
 
-    const { data: profile } = await admin.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
+    const { data: profile } = await db.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
     const now = Math.floor(Date.now() / 1000);
     const room = 'Kariqo-' + liveClass.id.replace(/[^a-zA-Z0-9-]/g, '');
     const token = await signMeetingToken({
