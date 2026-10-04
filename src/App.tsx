@@ -35,11 +35,23 @@ import {
   Flame,
   Trophy,
   MessageSquareText,
+  Video,
 } from 'lucide-react';
 import { backendReady, supabase } from './lib/supabase';
 import { storage } from './lib/storage';
 import { requestAiRoadmap } from './lib/aiRoadmap';
 import './recruiter.css';
+
+type JitsiExternalApi = {
+  dispose: () => void;
+  addListener: (event: string, listener: (event?: unknown) => void) => void;
+};
+
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI?: new (domain: string, options: Record<string, unknown>) => JitsiExternalApi;
+  }
+}
 
 type Page =
   | 'Overview'
@@ -1202,6 +1214,7 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
   const [profileLoading, setProfileLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [activeRoom, setActiveRoom] = useState<{ id: string; title: string } | null>(null);
 
   const refreshClasses = async () => {
     if (!supabase) return;
@@ -1312,6 +1325,7 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
       starts_at: startsAt.toISOString(),
       duration_minutes: Number(form.get('duration_minutes')) || 60,
       published: false,
+      meeting_url: String(form.get('meeting_url') || '').trim(),
     });
     setBusy(false);
     if (error) return say(error.message, 'error');
@@ -1325,6 +1339,19 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
     const { error } = await supabase.from('live_classes').update({ published: !item.published }).eq('id', item.id).eq('instructor_id', userId);
     if (error) return say(error.message, 'error');
     say(item.published ? 'Class unpublished' : 'Class published for students', 'success');
+    await refreshClasses();
+  };
+
+  const saveMeetingLink = async (event: FormEvent<HTMLFormElement>, item: Record<string, any>) => {
+    event.preventDefault();
+    if (!supabase) return;
+    const meetingUrl = String(new FormData(event.currentTarget).get('meeting_url') || '').trim();
+    if (meetingUrl && !isSafeMeetingUrl(meetingUrl)) return say('Use a complete secure https:// meeting link, or leave it blank to use Kariqo’s built-in room.', 'error');
+    setBusy(true);
+    const { error } = await supabase.from('live_classes').update({ meeting_url: meetingUrl }).eq('id', item.id).eq('instructor_id', userId);
+    setBusy(false);
+    if (error) return say(`Could not save the class link: ${error.message}`, 'error');
+    say(meetingUrl ? 'Meeting link saved. Registered students can join the class.' : 'Kariqo in-app room selected. Registered students can join from Live Classes.', 'success');
     await refreshClasses();
   };
 
@@ -1433,6 +1460,7 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
             <form className="mentor-class-form" onSubmit={createClass}>
               <label>Class title<input name="title" placeholder="e.g. Intro to Data Analytics" required maxLength={120} /></label>
               <label>About this class<textarea name="description" rows={3} placeholder="What will students learn?" maxLength={1000} /></label>
+              <label>External meeting link <small>Optional · leave blank to use Kariqo’s in-app video room</small><input name="meeting_url" type="url" placeholder="https://meet.google.com/..." maxLength={2048} /></label>
               <div className="mentor-form-row">
                 <label>Start date and time<input name="starts_at" type="datetime-local" required /></label>
                 <label>Duration<select name="duration_minutes" defaultValue="60"><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label>
@@ -1447,6 +1475,13 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
                 <small>{new Date(item.starts_at).toLocaleString()} · {item.duration_minutes} min</small>
                 <h3>{item.title}</h3>
                 <p>{item.description || 'No class description yet.'}</p>
+                <form className="mentor-meeting-link-form" onSubmit={(event) => void saveMeetingLink(event, item)}>
+                  <label>External meeting link<input name="meeting_url" type="url" defaultValue={item.meeting_url || ''} placeholder="Leave blank for Kariqo in-app room" maxLength={2048} /></label>
+                  <button className="secondary" disabled={busy}>{busy ? 'Saving…' : item.meeting_url ? 'Update link' : 'Choose link'}</button>
+                </form>
+                {item.published && (isSafeMeetingUrl(item.meeting_url)
+                  ? <a className="secondary mentor-start-class" href={item.meeting_url} target="_blank" rel="noopener noreferrer"><Video size={13} /> Open meeting</a>
+                  : <button className="primary mentor-start-class" onClick={() => setActiveRoom({ id: item.id, title: item.title })}><Video size={13} /> Start in-app class</button>)}
                 <div><span className={item.published ? 'mentor-status live' : 'mentor-status'}>{item.published ? 'Published' : 'Draft'}</span><button className="secondary" onClick={() => void publishClass(item)}>{item.published ? 'Unpublish' : 'Publish'}</button></div>
                 <details className="mentor-attendance-details">
                   <summary>{(() => { const roster = attendanceRows.filter((row) => row.class_id === item.id); const attended = roster.filter((row) => ['present', 'late'].includes(row.attendance_status)).length; const marked = roster.filter((row) => ['present', 'late', 'absent'].includes(row.attendance_status)).length; return `Attendance · ${roster.length} registered · ${attended} attended · ${marked ? Math.round(attended / marked * 100) : 0}% rate`; })()}</summary>
@@ -1494,6 +1529,7 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
           </Panel>
         </div>
       </main>
+      {activeRoom && <LiveClassRoom roomId={activeRoom.id} title={activeRoom.title} displayName={user} onClose={() => setActiveRoom(null)} />}
       {toast && <div className={`toast ${toast.type}`}><Check size={15} /> {toast.msg}</div>}
     </div>
   );
@@ -3045,6 +3081,7 @@ function Mentor({ c }: { c: Ctx }) {
 }
 
 function Classes({ c }: { c: Ctx }) {
+  const [activeRoom, setActiveRoom] = useState<{ id: string; title: string } | null>(null);
   const [myRegistrations, setMyRegistrations] = useState<Record<string, any>[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(true);
   const [studentMaterials, setStudentMaterials] = useState<Record<string, any>[]>([]);
@@ -3133,6 +3170,9 @@ function Classes({ c }: { c: Ctx }) {
               })}
             </div>
             {registrationByClass.has(x.id) && Date.now() >= new Date(x.starts_at).getTime() && Date.now() <= new Date(x.starts_at).getTime() + (Number(x.duration_minutes) || 60) * 60000 && <ClassGazeCoach title={x.title} />}
+            {registrationByClass.has(x.id) && isSafeMeetingUrl(x.meeting_url)
+              ? <a className="primary student-join-class" href={x.meeting_url} target="_blank" rel="noopener noreferrer"><Video size={15} /> Join live class <ArrowRight size={14} /></a>
+              : registrationByClass.has(x.id) && <button className="primary student-join-class" onClick={() => setActiveRoom({ id: x.id, title: x.title })}><Video size={15} /> Join in-app class <ArrowRight size={14} /></button>}
             <button
               className={registrationByClass.has(x.id) ? 'registered-class-button' : 'secondary'}
               disabled={registrationByClass.has(x.id) || new Date(x.starts_at).getTime() < Date.now()}
@@ -3154,8 +3194,72 @@ function Classes({ c }: { c: Ctx }) {
           <p>New published classes will appear here. You can still review your attendance history above.</p>
         </Panel>
       )}
+      {activeRoom && <LiveClassRoom roomId={activeRoom.id} title={activeRoom.title} displayName={c.records.profile.full_name || c.user} onClose={() => setActiveRoom(null)} />}
     </>
   );
+}
+
+function LiveClassRoom({ roomId, title, displayName, onClose }: { roomId: string; title: string; displayName: string; onClose: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const [status, setStatus] = useState('Connecting to the class room…');
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    let disposed = false;
+    let api: JitsiExternalApi | undefined;
+    const start = () => {
+      if (disposed || !containerRef.current || !window.JitsiMeetExternalAPI) return;
+      const safeRoomId = roomId.replace(/[^a-zA-Z0-9-]/g, '');
+      api = new window.JitsiMeetExternalAPI('meet.jit.si', {
+        roomName: `Kariqo-${safeRoomId}`,
+        parentNode: containerRef.current,
+        width: '100%',
+        height: '100%',
+        userInfo: { displayName: displayName || 'Kariqo learner' },
+        configOverwrite: { startWithAudioMuted: true, startWithVideoMuted: true, prejoinConfig: { enabled: true } },
+      });
+      api.addListener('videoConferenceJoined', () => setStatus('You’re in the live class. Camera and microphone start off; turn them on when you’re ready.'));
+      api.addListener('readyToClose', () => onCloseRef.current());
+    };
+    let script = document.querySelector<HTMLScriptElement>('script[data-kariqo-jitsi]');
+    const onLoad = () => start();
+    const onError = () => setStatus('Could not reach the video room. Check your connection and try again.');
+    if (window.JitsiMeetExternalAPI) start();
+    else {
+      if (!script) {
+        script = document.createElement('script');
+        script.src = 'https://meet.jit.si/external_api.js';
+        script.async = true;
+        script.dataset.kariqoJitsi = 'true';
+        document.head.appendChild(script);
+      }
+      script.addEventListener('load', onLoad);
+      script.addEventListener('error', onError);
+    }
+    return () => {
+      disposed = true;
+      script?.removeEventListener('load', onLoad);
+      script?.removeEventListener('error', onError);
+      api?.dispose();
+    };
+  }, [roomId, displayName]);
+  return <div className="live-room-shade" role="dialog" aria-modal="true" aria-label={`${title} live class`}>
+    <section className="live-room-panel">
+      <header><div><small>KARIQO LIVE CLASS</small><h2>{title}</h2><p>{status}</p></div><button className="secondary" onClick={onClose} aria-label="Leave class"><X size={16} /> Leave</button></header>
+      <div className="live-room-frame" ref={containerRef} />
+      <footer>Audio and video are off when you join. Allow browser camera/microphone access only if you want to speak or show video.</footer>
+    </section>
+  </div>;
+}
+
+function isSafeMeetingUrl(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
 }
 
 function ClassGazeCoach({ title }: { title: string }) {
