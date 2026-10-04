@@ -3202,51 +3202,59 @@ function Classes({ c }: { c: Ctx }) {
 function LiveClassRoom({ roomId, title, displayName, isHost = false, onClose }: { roomId: string; title: string; displayName: string; isHost?: boolean; onClose: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
-  const [status, setStatus] = useState('Connecting to the class room…');
+  const [status, setStatus] = useState('Securely joining the class…');
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     let disposed = false;
     let api: JitsiExternalApi | undefined;
-    const start = () => {
+    let script: HTMLScriptElement | null = null;
+    const start = (meeting: { token: string; roomName: string; domain: string; externalApiUrl: string }) => {
       if (disposed || !containerRef.current || !window.JitsiMeetExternalAPI) return;
-      const safeRoomId = roomId.replace(/[^a-zA-Z0-9-]/g, '');
-      api = new window.JitsiMeetExternalAPI('meet.jit.si', {
-        roomName: `Kariqo-${safeRoomId}`,
+      api = new window.JitsiMeetExternalAPI(meeting.domain, {
+        roomName: meeting.roomName,
+        jwt: meeting.token,
         parentNode: containerRef.current,
         width: '100%',
         height: '100%',
         userInfo: { displayName: displayName || 'Kariqo learner' },
         configOverwrite: { startWithAudioMuted: true, startWithVideoMuted: true, prejoinConfig: { enabled: true } },
       });
-      api.addListener('videoConferenceJoined', () => setStatus('You’re in the live class. Camera and microphone start off; turn them on when you’re ready.'));
+      api.addListener('videoConferenceJoined', () => setStatus(isHost ? 'You’re hosting this live class. Camera and microphone start off; turn them on when ready.' : 'You’re in the live class. Camera and microphone start off; turn them on when you’re ready.'));
       api.addListener('readyToClose', () => onCloseRef.current());
     };
-    let script = document.querySelector<HTMLScriptElement>('script[data-kariqo-jitsi]');
-    const onLoad = () => start();
-    const onError = () => setStatus('Could not reach the video room. Check your connection and try again.');
-    if (window.JitsiMeetExternalAPI) start();
-    else {
-      if (!script) {
-        script = document.createElement('script');
-        script.src = 'https://meet.jit.si/external_api.js';
-        script.async = true;
-        script.dataset.kariqoJitsi = 'true';
-        document.head.appendChild(script);
+    const connect = async () => {
+      if (!supabase) { setStatus('Sign in to start this live class.'); return; }
+      const { data, error } = await supabase.functions.invoke('jaas-meeting-token', { body: { classId: roomId } });
+      if (disposed) return;
+      if (error || !data?.token || !data?.roomName || !data?.externalApiUrl) {
+        setStatus(data?.error || error?.message || 'Could not prepare the live class. Try again in a moment.');
+        return;
       }
-      script.addEventListener('load', onLoad);
-      script.addEventListener('error', onError);
-    }
+      const meeting = data as { token: string; roomName: string; domain: string; externalApiUrl: string };
+      const attach = () => start(meeting);
+      script = document.querySelector<HTMLScriptElement>('script[data-kariqo-jaas]');
+      if (window.JitsiMeetExternalAPI) attach();
+      else {
+        if (!script) {
+          script = document.createElement('script');
+          script.src = meeting.externalApiUrl;
+          script.async = true;
+          script.dataset.kariqoJaas = 'true';
+          document.head.appendChild(script);
+        }
+        script.addEventListener('load', attach, { once: true });
+        script.addEventListener('error', () => setStatus('Could not reach the JaaS video room. Check your connection and try again.'), { once: true });
+      }
+    };
+    void connect().catch(() => { if (!disposed) setStatus('Could not start the live class. Sign in again and retry.'); });
     return () => {
       disposed = true;
-      script?.removeEventListener('load', onLoad);
-      script?.removeEventListener('error', onError);
       api?.dispose();
     };
-  }, [roomId, displayName]);
-  const roomUrl = `https://meet.jit.si/Kariqo-${roomId.replace(/[^a-zA-Z0-9-]/g, '')}`;
+  }, [roomId, displayName, isHost]);
   return <div className="live-room-shade" role="dialog" aria-modal="true" aria-label={`${title} live class`}>
     <section className="live-room-panel">
-      <header><div><small>KARIQO LIVE CLASS</small><h2>{title}</h2><p>{status}</p></div><div className="live-room-actions">{isHost && <a className="secondary" href={roomUrl} target="_blank" rel="noopener noreferrer">Host sign-in in browser</a>}<button className="secondary" onClick={onClose} aria-label="Leave class"><X size={16} /> Leave</button></div></header>
+      <header><div><small>KARIQO LIVE CLASS</small><h2>{title}</h2><p>{status}</p></div><div className="live-room-actions"><button className="secondary" onClick={onClose} aria-label="Leave class"><X size={16} /> Leave</button></div></header>
       <div className="live-room-frame" ref={containerRef} />
       <footer>Audio and video are off when you join. Allow browser camera/microphone access only if you want to speak or show video.</footer>
     </section>
