@@ -1,5 +1,30 @@
-import { corsHeaders, getAdmin, getSignedInUser, json } from '../_shared/membership.ts';
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+});
+
+function getAdmin() {
+  return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+}
+
+async function getSignedInUser(req: Request) {
+  const authorization = req.headers.get('Authorization');
+  if (!authorization) return null;
+  const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: authorization } },
+  });
+  const { data: { user }, error } = await client.auth.getUser();
+  return error ? null : user;
+}
 
 function base64Url(bytes: Uint8Array) {
   let binary = '';
@@ -24,12 +49,12 @@ async function signMeetingToken(payload: Record<string, unknown>, appId: string,
     false,
     ['sign'],
   );
-  const header = { alg: 'RS256', kid: `${appId}/${keyId}`, typ: 'JWT' };
+  const header = { alg: 'RS256', kid: appId + '/' + keyId, typ: 'JWT' };
   const encodedHeader = base64Url(new TextEncoder().encode(JSON.stringify(header)));
   const encodedPayload = base64Url(new TextEncoder().encode(JSON.stringify(payload)));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signingInput = encodedHeader + '.' + encodedPayload;
   const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(signingInput));
-  return `${signingInput}.${base64Url(new Uint8Array(signature))}`;
+  return signingInput + '.' + base64Url(new Uint8Array(signature));
 }
 
 serve(async (req) => {
@@ -77,7 +102,7 @@ serve(async (req) => {
 
     const { data: profile } = await admin.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
     const now = Math.floor(Date.now() / 1000);
-    const room = `Kariqo-${liveClass.id.replace(/[^a-zA-Z0-9-]/g, '')}`;
+    const room = 'Kariqo-' + liveClass.id.replace(/[^a-zA-Z0-9-]/g, '');
     const token = await signMeetingToken({
       aud: 'jitsi',
       iss: 'chat',
@@ -104,7 +129,7 @@ serve(async (req) => {
       },
     }, appId, keyId, privateKey);
 
-    return json({ token, roomName: `${appId}/${room}`, domain: '8x8.vc', externalApiUrl: `https://8x8.vc/${appId}/external_api.js`, isModerator: isMentor });
+    return json({ token, roomName: appId + '/' + room, domain: '8x8.vc', externalApiUrl: 'https://8x8.vc/' + appId + '/external_api.js', isModerator: isMentor });
   } catch (error) {
     console.error('JaaS meeting token creation failed', error instanceof Error ? error.message : 'unknown error');
     return json({ error: 'Could not start this live class. Please try again.' }, 500);
