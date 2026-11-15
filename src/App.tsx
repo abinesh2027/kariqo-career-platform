@@ -280,7 +280,7 @@ export default function App() {
         supabase.from('skillora_job_offers').select('id,status,match_score,created_at,company_name,job_title,job_location').eq('student_id', current.id).order('created_at', { ascending: false }),
         supabase.from('skillvo_interview_practice').select('*').eq('user_id', current.id).order('practice_date', { ascending: false }),
         supabase.from('class_registrations').select('class_id,attendance_status,attended_at').eq('user_id', current.id),
-        supabase.from('mentor_assignment_submissions').select('score,reviewed_at').eq('student_id', current.id).not('score', 'is', null),
+        supabase.from('mentor_assignment_submissions').select('score,reviewed_at').eq('student_id', current.id).not('score', 'is', null).order('reviewed_at', { ascending: false, nullsFirst: false }),
         supabase.from('skillvo_job_applications').select('*').eq('student_id', current.id).order('updated_at', { ascending: false }),
       ]);
 
@@ -539,7 +539,7 @@ export default function App() {
         supabase.from('skillora_job_offers').select('id,status,match_score,created_at,company_name,job_title,job_location').eq('student_id', userId).order('created_at', { ascending: false }),
         supabase.from('skillvo_interview_practice').select('*').eq('user_id', userId).order('practice_date', { ascending: false }),
         supabase.from('class_registrations').select('class_id,attendance_status,attended_at').eq('user_id', userId),
-        supabase.from('mentor_assignment_submissions').select('score,reviewed_at').eq('student_id', userId).not('score', 'is', null),
+        supabase.from('mentor_assignment_submissions').select('score,reviewed_at').eq('student_id', userId).not('score', 'is', null).order('reviewed_at', { ascending: false, nullsFirst: false }),
         supabase.from('skillvo_job_applications').select('*').eq('student_id', userId).order('updated_at', { ascending: false }),
       ]);
 
@@ -822,10 +822,10 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
   const offerMood = Boolean(newOffer);
   const scoredAssignments = assignmentScores.map((item) => Number(item.score)).filter(Number.isFinite);
   const selfRatedSkills = skillScores.map((item) => Number(item.score)).filter(Number.isFinite);
-  const performanceLow = scoredAssignments.length
-    ? scoredAssignments.reduce((sum, score) => sum + score, 0) / scoredAssignments.length < 50
-    : selfRatedSkills.length >= 2 && selfRatedSkills.reduce((sum, score) => sum + score, 0) / selfRatedSkills.length < 40;
-  const mood: 'neutral' | 'excited' | 'supportive' = offerMood ? 'excited' : performanceLow ? 'supportive' : 'neutral';
+  const latestReviewedScore = scoredAssignments[0];
+  const skillAverage = selfRatedSkills.length ? selfRatedSkills.reduce((sum, score) => sum + score, 0) / selfRatedSkills.length : null;
+  const performanceLow = latestReviewedScore !== undefined ? latestReviewedScore < 50 : skillAverage !== null && skillAverage < 40;
+  const performanceGood = latestReviewedScore !== undefined ? latestReviewedScore >= 75 : skillAverage !== null && skillAverage >= 75; const mood: 'neutral' | 'excited' | 'supportive' | 'angry' = offerMood || appreciating || performanceGood ? 'excited' : performanceLow ? 'angry' : 'neutral';
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const taskKey = `kariqo-kiko-task:${userId}:${todayKey}`;
@@ -898,7 +898,7 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
   );
 }
 
-function BuddyCreature({ mood = 'neutral', curious = false, appreciating = false }: { mood?: 'neutral' | 'excited' | 'supportive'; curious?: boolean; appreciating?: boolean }) {
+function BuddyCreature({ mood = 'neutral', curious = false, appreciating = false }: { mood?: 'neutral' | 'excited' | 'supportive' | 'angry'; curious?: boolean; appreciating?: boolean }) {
   return <svg viewBox="0 0 80 88" role="img" aria-label={`${curious ? 'curious' : mood} Kiko mascot`} className={`buddy-creature-svg mood-${mood} ${curious ? 'is-curious' : ''} ${appreciating ? 'is-appreciating' : ''}`}>
     <ellipse className="buddy-shadow" cx="40" cy="82" rx="18" ry="4" />
     <path className="buddy-tail" d="M52 65c14 1 17 13 8 17-5 2-9-1-9-5 0-2 2-4 4-3" />
@@ -915,11 +915,11 @@ function BuddyCreature({ mood = 'neutral', curious = false, appreciating = false
       <path className="buddy-ear" d="M22 25 17 9l16 9M58 25l5-16-16 9" />
       <path className="buddy-body" d="M15 34c0-15 10-25 25-25s25 10 25 25-10 26-25 26-25-11-25-26Z" />
       <path className="buddy-cheek" d="M21 42c4 2 7 2 10 0M49 42c3 2 6 2 10 0" />
-      {mood === 'supportive' && <path className="buddy-brow" d="m24 28 7 2M49 30l7-2" />}
+      {mood === 'supportive' && <path className="buddy-brow" d="m24 28 7 2M49 30l7-2" />}{mood === 'angry' && <path className="buddy-brow" d="m24 27 7 4M49 31l7-4" />}
       {curious && mood === 'neutral' && <path className="buddy-brow buddy-curious-brow" d="m24 28 7-2M49 26l7 2" />}
       <ellipse className="buddy-eye" cx="31" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : '3.8'} />
       <ellipse className="buddy-eye" cx="49" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : '3.8'} />
-      {mood === 'excited' ? <path className="buddy-smile" d="M30 42c4 7 16 7 20 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M32 48c4-5 12-5 16 0" /> : curious ? <ellipse className="buddy-curious-mouth" cx="40" cy="44" rx="3" ry="4" /> : <path className="buddy-smile" d="M34 43c3 4 9 4 12 0" />}
+      {mood === 'excited' ? <path className="buddy-smile" d="M30 42c4 7 16 7 20 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M32 48c4-5 12-5 16 0" /> : mood === 'angry' ? <path className="buddy-smile" d="M32 41Q40 52 48 41" /> : curious ? <ellipse className="buddy-curious-mouth" cx="40" cy="44" rx="3" ry="4" /> : <path className="buddy-smile" d="M34 43c3 4 9 4 12 0" />}
       {mood === 'supportive' && <path className="buddy-tear" d="M58 43c0 2-2 3-2 5a2 2 0 0 0 4 0c0-2-2-3-2-5Z" />}
       {mood === 'excited' ? <g className="buddy-celebration"><path d="m40 1 2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5ZM8 26l1.3 3 3 1.3-3 1.3L8 35l-1.3-3.4-3-1.3 3-1.3L8 26ZM72 19l1.3 3 3 1.3-3 1.3L72 28l-1.3-3.4-3-1.3 3-1.3L72 19Z" /></g> : <path className="buddy-star" d="m40 4 1.5 3.5L45 9l-3.5 1.5L40 14l-1.5-3.5L35 9l3.5-1.5L40 4Z" />}
     </g>
