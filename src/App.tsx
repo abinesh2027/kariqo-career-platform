@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, ChangeEvent, FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Activity,
   AlertCircle,
@@ -36,6 +37,7 @@ import {
   Trophy,
   MessageSquareText,
   Video,
+  ImagePlus,
 } from 'lucide-react';
 import { backendReady, supabase } from './lib/supabase';
 import { storage } from './lib/storage';
@@ -818,6 +820,7 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
   const dragOrigin = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const wasDragged = useRef(false);
   const [newOffer, setNewOffer] = useState<Record<string, any> | null>(null);
+  const [hydrationReminder, setHydrationReminder] = useState(false);
   const latestOffer = offers[0];
   const offerMood = Boolean(newOffer);
   const scoredAssignments = assignmentScores.map((item) => Number(item.score)).filter(Number.isFinite);
@@ -825,7 +828,8 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
   const latestReviewedScore = scoredAssignments[0];
   const skillAverage = selfRatedSkills.length ? selfRatedSkills.reduce((sum, score) => sum + score, 0) / selfRatedSkills.length : null;
   const performanceLow = latestReviewedScore !== undefined ? latestReviewedScore < 50 : skillAverage !== null && skillAverage < 40;
-  const performanceGood = latestReviewedScore !== undefined ? latestReviewedScore >= 75 : skillAverage !== null && skillAverage >= 75; const mood: 'neutral' | 'excited' | 'supportive' | 'angry' = offerMood || appreciating || performanceGood ? 'excited' : performanceLow ? 'angry' : 'neutral';
+  const performanceGood = latestReviewedScore !== undefined ? latestReviewedScore >= 75 : skillAverage !== null && skillAverage >= 75;
+  const mood: 'neutral' | 'excited' | 'supportive' | 'angry' = offerMood || appreciating || performanceGood ? 'excited' : performanceLow ? 'angry' : 'neutral';
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const taskKey = `kariqo-kiko-task:${userId}:${todayKey}`;
@@ -873,9 +877,37 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
     return () => clearTimeout(timer);
   }, [newOffer]);
 
+  useEffect(() => {
+    if (!userId) return;
+    let activeMs = 0;
+    let lastTick = performance.now();
+    const timer = window.setInterval(() => {
+      const now = performance.now();
+      if (!document.hidden) activeMs += now - lastTick;
+      lastTick = now;
+      if (activeMs >= 45 * 60 * 1000) {
+        activeMs = 0;
+        setHydrationReminder(true);
+      }
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!hydrationReminder || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const speech = new SpeechSynthesisUtterance('Hey! Quick water break. Take a sip of water, then we can keep going.');
+    speech.lang = 'en-IN'; speech.pitch = 1.16; speech.rate = 0.94;
+    const voices = window.speechSynthesis.getVoices();
+    speech.voice = voices.find((voice) => /female|samantha|karen|zira|google.*english.*female/i.test(voice.name)) || voices.find((voice) => voice.lang.toLowerCase().startsWith('en-in')) || null;
+    window.speechSynthesis.speak(speech);
+    return () => window.speechSynthesis.cancel();
+  }, [hydrationReminder]);
+
   if (!visible) return null;
 
   return (
+    <>
     <div className={`kariqo-buddy ${open ? 'is-open' : ''} ${isMoving ? 'is-moving' : ''}`} style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}>
       {open && <section className={`kariqo-buddy-card mood-${mood}`} aria-label="Kiko learning companion">
         <div className="kariqo-buddy-card-head"><div className={`kariqo-buddy-avatar mood-${mood}`}><BuddyCreature mood={mood} appreciating={appreciating} /></div><div><small>KARIQO COMPANION</small><b>Kiko{ name ? ` · Hi ${name}!` : ''}</b></div><button aria-label="Close Kiko" onClick={() => setOpen(false)}><X size={16} /></button></div>
@@ -895,6 +927,8 @@ function KariqoBuddy({ profile, roadmap, userId, setPage, offers, skillScores, a
         <span className={`kariqo-buddy-creature mood-${mood} ${curious ? 'is-curious' : ''}`}><BuddyCreature mood={mood} curious={curious} appreciating={appreciating} /></span>
       </button>
     </div>
+    {hydrationReminder && createPortal(<div className="kiko-hydration-overlay" role="dialog" aria-modal="true" aria-label="Kiko hydration reminder"><section><div className="kiko-hydration-walker"><BuddyCreature mood="excited" /></div><small>KIKO · QUICK RESET</small><h2>Water break!</h2><p>Take a sip of water and rest your eyes for a moment. You’ve been learning for 45 minutes.</p><button className="primary" onClick={() => setHydrationReminder(false)}>Done · back to learning <ArrowRight size={14} /></button></section></div>, document.body)}
+    </>
   );
 }
 
@@ -915,10 +949,11 @@ function BuddyCreature({ mood = 'neutral', curious = false, appreciating = false
       <path className="buddy-ear" d="M22 25 17 9l16 9M58 25l5-16-16 9" />
       <path className="buddy-body" d="M15 34c0-15 10-25 25-25s25 10 25 25-10 26-25 26-25-11-25-26Z" />
       <path className="buddy-cheek" d="M21 42c4 2 7 2 10 0M49 42c3 2 6 2 10 0" />
-      {mood === 'supportive' && <path className="buddy-brow" d="m24 28 7 2M49 30l7-2" />}{mood === 'angry' && <path className="buddy-brow" d="m24 27 7 4M49 31l7-4" />}
+      {mood === 'supportive' && <path className="buddy-brow" d="m24 28 7 2M49 30l7-2" />}
+      {mood === 'angry' && <path className="buddy-brow" d="m24 27 7 4M49 31l7-4" />}
       {curious && mood === 'neutral' && <path className="buddy-brow buddy-curious-brow" d="m24 28 7-2M49 26l7 2" />}
-      <ellipse className="buddy-eye" cx="31" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : '3.8'} />
-      <ellipse className="buddy-eye" cx="49" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : '3.8'} />
+      <ellipse className="buddy-eye" cx="31" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : mood === 'angry' ? '2.3' : '3.8'} transform={mood === 'angry' ? 'rotate(-12 31 34)' : undefined} />
+      <ellipse className="buddy-eye" cx="49" cy="34" rx={curious && mood === 'neutral' ? '3.4' : '2.7'} ry={mood === 'excited' ? '4.4' : mood === 'angry' ? '2.3' : '3.8'} transform={mood === 'angry' ? 'rotate(12 49 34)' : undefined} />
       {mood === 'excited' ? <path className="buddy-smile" d="M30 42c4 7 16 7 20 0" /> : mood === 'supportive' ? <path className="buddy-smile" d="M32 48c4-5 12-5 16 0" /> : mood === 'angry' ? <path className="buddy-smile" d="M32 41Q40 52 48 41" /> : curious ? <ellipse className="buddy-curious-mouth" cx="40" cy="44" rx="3" ry="4" /> : <path className="buddy-smile" d="M34 43c3 4 9 4 12 0" />}
       {mood === 'supportive' && <path className="buddy-tear" d="M58 43c0 2-2 3-2 5a2 2 0 0 0 4 0c0-2-2-3-2-5Z" />}
       {mood === 'excited' ? <g className="buddy-celebration"><path d="m40 1 2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5ZM8 26l1.3 3 3 1.3-3 1.3L8 35l-1.3-3.4-3-1.3 3-1.3L8 26ZM72 19l1.3 3 3 1.3-3 1.3L72 28l-1.3-3.4-3-1.3 3-1.3L72 19Z" /></g> : <path className="buddy-star" d="m40 4 1.5 3.5L45 9l-3.5 1.5L40 14l-1.5-3.5L35 9l3.5-1.5L40 4Z" />}
@@ -1210,6 +1245,9 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
   const [classAssignments, setClassAssignments] = useState<Record<string, any>[]>([]);
   const [assignmentSubmissions, setAssignmentSubmissions] = useState<Record<string, any>[]>([]);
   const [studentSkillRows, setStudentSkillRows] = useState<Record<string, any>[]>([]);
+  const [classNotes, setClassNotes] = useState<Record<string, any>[]>([]);
+  const [mentorQuestions, setMentorQuestions] = useState<Record<string, any>[]>([]);
+  const [activeQuestion, setActiveQuestion] = useState<Record<string, any> | null>(null);
   const [mentorProfile, setMentorProfile] = useState<Record<string, any> | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -1225,13 +1263,16 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
       const classRows = data || [];
       setClasses(classRows);
       const classIds = classRows.map((item) => item.id);
-      if (!classIds.length) { setAttendanceRows([]); setClassMaterials([]); setClassAssignments([]); setAssignmentSubmissions([]); setStudentSkillRows([]); }
+      if (!classIds.length) { setAttendanceRows([]); setClassMaterials([]); setClassAssignments([]); setAssignmentSubmissions([]); setStudentSkillRows([]); setClassNotes([]); }
       else {
-        const [registrationResult, materialsResult, assignmentsResult] = await Promise.all([
+        const [registrationResult, materialsResult, assignmentsResult, notesResult] = await Promise.all([
           supabase.from('class_registrations').select('user_id,class_id,attendance_status,attended_at,created_at').in('class_id', classIds),
           supabase.from('mentor_class_materials').select('*').in('class_id', classIds).order('created_at', { ascending: false }),
           supabase.from('mentor_class_assignments').select('*').in('class_id', classIds).order('created_at', { ascending: false }),
+          supabase.from('mentor_class_notes').select('*').in('class_id', classIds),
         ]);
+        if (notesResult.error) say(`Could not load class notes: ${notesResult.error.message}`, 'error');
+        else setClassNotes(notesResult.data || []);
         const registrations = registrationResult.data;
         const registrationError = registrationResult.error;
         if (registrationError) say(`Could not load attendance: ${registrationError.message}`, 'error');
@@ -1284,6 +1325,48 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
   };
 
   useEffect(() => { void refreshMentorProfile(); }, [userId]);
+
+  const loadMentorQuestions = async () => {
+    if (!supabase || !mentorProfile?.id) { setMentorQuestions([]); return; }
+    const { data, error } = await supabase.from('mentor_doubt_threads').select('*').eq('mentor_id', mentorProfile.id).order('updated_at', { ascending: false });
+    if (error) { say(`Could not load student questions: ${error.message}`, 'error'); return; }
+    const threads = data || [];
+    const threadIds = threads.map((thread) => thread.id);
+    const { data: messageRows } = threadIds.length ? await supabase.from('mentor_doubt_messages').select('*').in('thread_id', threadIds).order('created_at', { ascending: false }) : { data: [] as any[] };
+    const latest = new Map<string, Record<string, any>>();
+    (messageRows || []).forEach((message) => { if (!latest.has(message.thread_id)) latest.set(message.thread_id, message); });
+    const studentIds = [...new Set(threads.map((thread) => thread.student_id))];
+    const { data: profiles } = studentIds.length ? await supabase.from('profiles').select('id,full_name').in('id', studentIds) : { data: [] as any[] };
+    const names = new Map((profiles || []).map((profile) => [profile.id, profile.full_name]));
+    setMentorQuestions(threads.map((thread) => {
+      const lastMessage = latest.get(thread.id);
+      return { ...thread, student_name: names.get(thread.student_id) || 'Student', latest_message: lastMessage?.body || thread.initial_message, latest_at: lastMessage?.created_at || thread.updated_at || thread.created_at };
+    }).sort((a, b) => new Date(b.latest_at).getTime() - new Date(a.latest_at).getTime()));
+  };
+
+  useEffect(() => {
+    if (!mentorProfile?.id) return;
+    void loadMentorQuestions();
+    const timer = window.setInterval(() => void loadMentorQuestions(), 12000);
+    return () => window.clearInterval(timer);
+  }, [mentorProfile?.id]);
+
+  const saveClassNotes = async (event: FormEvent<HTMLFormElement>, classId: string) => {
+    event.preventDefault();
+    if (!supabase) return;
+    const form = new FormData(event.currentTarget);
+    const notes = String(form.get('notes') || '').trim();
+    const recordingUrl = String(form.get('recording_url') || '').trim();
+    if (recordingUrl && !/^https:\/\//i.test(recordingUrl)) return say('Recording link must start with https://', 'error');
+    setBusy(true);
+    const { error } = await supabase.from('mentor_class_notes').upsert({
+      class_id: classId, mentor_id: userId, notes, recording_url: recordingUrl, published: form.get('published') === 'on',
+    }, { onConflict: 'class_id' });
+    setBusy(false);
+    if (error) return say(`Could not save class recap: ${error.message}`, 'error');
+    say(form.get('published') === 'on' ? 'Class recap saved; students can review it after class ends.' : 'Class recap saved as a draft.', 'success');
+    await refreshClasses();
+  };
 
   const saveMentorProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1441,6 +1524,10 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
           </form>}
           {mentorProfile && <small className="mentor-directory-status">Directory status: {mentorProfile.published ? 'Visible to students' : 'Hidden'}</small>}
         </Panel>
+        <Panel className="mentor-question-inbox">
+          <div className="mentor-classes-heading"><div><h2>Student doubt messages</h2><p>Reply here when a student can’t connect for a live session.</p></div><MessageSquareText size={18} /></div>
+          {mentorQuestions.length ? <div className="mentor-question-list">{mentorQuestions.map((question) => <button className="mentor-question-row" key={question.id} onClick={() => setActiveQuestion(question)}><span className="mentor-question-avatar">{String(question.student_name).split(' ').map((part: string) => part[0]).slice(0, 2).join('')}</span><span><b>{question.student_name} · {question.subject || 'Doubt'}</b><small>{question.latest_message}</small></span><small>{new Date(question.latest_at).toLocaleDateString()}</small><MessageCircle size={15} /></button>)}</div> : <p className="mentor-attendance-empty">Student questions will show up here. You can reply in a private thread.</p>}
+        </Panel>
         <div className="mentor-attendance-summary">
           <Panel><small>YOUR CLASSES</small><b>{classes.length}</b><span>Draft and published</span></Panel>
           <Panel><small>STUDENT SIGN-UPS</small><b>{attendanceRows.length}</b><span>Across all your classes</span></Panel>
@@ -1490,6 +1577,15 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
                 </details>
                 <details className="mentor-learning-tools">
                   <summary>Class materials & assignments</summary>
+                  <section className="mentor-class-recap-editor">
+                    <div><h4>After-class notes & recording</h4><small>Publish a recap; registered students can see it after class ends.</small></div>
+                    <form onSubmit={(event) => void saveClassNotes(event, item.id)}>
+                      <textarea name="notes" rows={4} maxLength={12000} defaultValue={classNotes.find((note) => note.class_id === item.id)?.notes || ''} placeholder="Key topics, examples, homework, and follow-up pointers" />
+                      <input name="recording_url" type="url" maxLength={2048} defaultValue={classNotes.find((note) => note.class_id === item.id)?.recording_url || ''} placeholder="Optional recording link (https://...)" />
+                      <label><input name="published" type="checkbox" defaultChecked={classNotes.find((note) => note.class_id === item.id)?.published ?? false} /> Publish recap after the class</label>
+                      <button className="secondary" disabled={busy}>{busy ? 'Saving…' : 'Save class recap'}</button>
+                    </form>
+                  </section>
                   <div className="mentor-tools-columns">
                     <section><h4>Materials</h4>
                       <form onSubmit={(event) => void addMaterial(event, item.id)} className="mentor-inline-form">
@@ -1530,6 +1626,7 @@ function MentorPortal({ user, email, userId, logout, say, toast }: {
         </div>
       </main>
       {activeRoom && <LiveClassRoom roomId={activeRoom.id} title={activeRoom.title} displayName={user} isHost onClose={() => setActiveRoom(null)} />}
+      {activeQuestion && mentorProfile && <MentorChatDialog mentor={mentorProfile} studentId={activeQuestion.student_id} studentName={activeQuestion.student_name} initialThread={activeQuestion} viewerIsMentor onClose={() => setActiveQuestion(null)} say={say} />}
       {toast && <div className={`toast ${toast.type}`}><Check size={15} /> {toast.msg}</div>}
     </div>
   );
@@ -1698,6 +1795,8 @@ function CompanyDashboard({ user, email, logout, say, toast }: {
   const [requestedCompany, setRequestedCompany] = useState('');
   const [selectedPlan, setSelectedPlan] = useState('');
   const [billingBusy, setBillingBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiShortlist, setAiShortlist] = useState(false);
 
   const load = async (preferredJobId = '') => {
     if (!supabase) {
@@ -1838,6 +1937,19 @@ function CompanyDashboard({ user, email, logout, say, toast }: {
   };
 
   const selectedJob = overview?.jobs.find((job) => job.id === selectedJobId);
+  const runAiShortlist = async () => {
+    if (!supabase || !selectedJobId) return say('Choose an open role first.', 'info');
+    setAiBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('company-dashboard', { body: { action: 'ai-shortlist', jobId: selectedJobId } });
+      if (error) throw new Error(await functionErrorMessage(error, 'AI shortlist could not run'));
+      if (data?.error) throw new Error(data.error);
+      setOverview(data as CompanyOverview);
+      setAiShortlist(true);
+      say('AI shortlist is ready. Review its evidence and make the hiring decision yourself.', 'success');
+    } catch (error) { say(dbMessage(error, 'AI shortlist could not run'), 'error'); }
+    finally { setAiBusy(false); }
+  };
   return <div className="company-portal">
     <header className="company-topbar"><div className="brand"><div className="brand-mark"><Building2 /></div><div><b>Kariqo</b><small>Company portal · {overview?.company.name || 'Employer workspace'}</small></div></div><div className="company-account"><span>{user} · {email}</span><button className="secondary" onClick={() => void logout()}><LogOut size={14} /> Sign out</button></div></header>
     <main className="company-content">
@@ -1865,15 +1977,74 @@ function CompanyDashboard({ user, email, logout, say, toast }: {
             <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Publish job requirement'} <ArrowRight size={15} /></button>
           </form>
         </Panel>
-        <Panel className="company-candidate-panel"><div className="company-section-head"><div><h2>Matched students</h2><p>Only interview-ready students who chose to share their resume appear here.</p></div><button className="secondary" onClick={() => void load(selectedJobId)} disabled={loading}><RefreshCw size={14} /></button></div>
+        <Panel className="company-candidate-panel"><div className="company-section-head"><div><h2>{aiShortlist ? 'AI-ranked candidates' : 'Matched students'}</h2><p>Only interview-ready students who chose to share their resume appear here. AI ranking is advisory and evidence-based.</p></div><div className="company-action-row"><button className="primary" onClick={() => void runAiShortlist()} disabled={loading || aiBusy || !selectedJobId}>{aiBusy ? 'AI reviewing…' : <><Sparkles size={13} /> AI shortlist</>}</button><button className="secondary" onClick={() => { setAiShortlist(false); void load(selectedJobId); }} disabled={loading}><RefreshCw size={14} /></button></div></div>
           {overview?.jobs.length ? <div className="company-job-tabs">{overview.jobs.map((job) => <button key={job.id} className={job.id === selectedJobId ? 'selected' : ''} onClick={() => void load(job.id)}>{job.title}<small>{job.status}</small></button>)}</div> : null}
           {overview?.applications?.length ? <div className="company-applicants"><h3>Applications from students</h3>{overview.applications.map((application) => <article key={application.id}><div><b>{application.student?.full_name || 'Student'}</b><small>{application.student?.course || 'Kariqo learner'}{application.student?.college ? ` · ${application.student.college}` : ''} · Applied {new Date(application.created_at).toLocaleDateString()}</small></div><select aria-label={`Application stage for ${application.student?.full_name || 'student'}`} value={application.status} disabled={busy} onChange={(event) => void updateApplicantStage(application.id, event.target.value)}><option value="applied">Applied</option><option value="screening">Screening</option><option value="interview">Interview</option><option value="rejected">Not selected</option></select></article>)}</div> : null}
-          {loading ? <div className="owner-loading"><Loader2 className="spin" /> Loading matched students…</div> : loadError ? <div className="owner-empty"><AlertCircle size={18} /><h3>Company dashboard could not load</h3><p>{loadError}</p><button className="secondary" onClick={() => void load()}><RefreshCw size={14} /> Try again</button></div> : !selectedJob ? <div className="owner-empty"><BriefcaseBusiness /><h3>Post your first role</h3><p>Add a job requirement and its required skills to find matching students.</p></div> : overview?.candidates.length ? <div className="company-candidate-list">{overview.candidates.map((candidate) => <article className="company-candidate" key={candidate.id}><div className="company-candidate-heading"><div><small>{candidate.course || 'Kariqo student'}{candidate.college ? ` · ${candidate.college}` : ''}</small><h3>{candidate.name || 'Interview-ready candidate'}</h3><p>{candidate.careerGoal || selectedJob.title}</p></div><strong>{candidate.matchScore}%<small>SKILL MATCH</small></strong></div><p className="candidate-readiness-score">Career readiness · <b>{candidate.readinessScore}/100</b></p><div className="chips">{candidate.skills.map((skill: { name: string; score: number }) => <span className="chip" key={skill.name}>{skill.name} · {skill.score}%</span>)}</div><p className="candidate-projects"><b>Completed projects:</b> {candidate.projects.map((project: { title: string }) => project.title).join(' · ')}</p><details><summary><FileText size={14} /> View shared ATS resume</summary><pre>{candidate.resume}</pre></details><button className="primary" onClick={() => void sendOffer(candidate.id)} disabled={busy || Boolean(candidate.existingOffer)}><Send size={14} />{candidate.existingOffer ? 'Offer already sent' : 'Send job offer'}</button></article>)}</div> : <div className="owner-empty"><Users /><h3>No matches for this role yet</h3><p>Matching starts at 50% skill match. Students must reach 70 readiness points, complete their roadmap and one project, confirm interview readiness, and opt into sharing.</p></div>}
+          {loading ? <div className="owner-loading"><Loader2 className="spin" /> Loading matched students…</div> : loadError ? <div className="owner-empty"><AlertCircle size={18} /><h3>Company dashboard could not load</h3><p>{loadError}</p><button className="secondary" onClick={() => void load()}><RefreshCw size={14} /> Try again</button></div> : !selectedJob ? <div className="owner-empty"><BriefcaseBusiness /><h3>Post your first role</h3><p>Add a job requirement and its required skills to find matching students.</p></div> : overview?.candidates.length ? <div className="company-candidate-list">{overview.candidates.map((candidate) => <article className="company-candidate" key={candidate.id}><div className="company-candidate-heading"><div><small>{candidate.course || 'Kariqo student'}{candidate.college ? ` · ${candidate.college}` : ''}</small><h3>{candidate.name || 'Interview-ready candidate'}</h3><p>{candidate.careerGoal || selectedJob.title}</p></div><strong>{candidate.matchScore}%<small>SKILL MATCH</small></strong></div><p className="candidate-readiness-score">Career readiness · <b>{candidate.readinessScore}/100</b></p><div className="chips">{candidate.skills.map((skill: { name: string; score: number }) => <span className="chip" key={skill.name}>{skill.name} · {skill.score}%</span>)}</div><p className="candidate-projects"><b>Completed projects:</b> {candidate.projects.map((project: { title: string }) => project.title).join(' · ')}</p>{candidate.aiReason && <div className="company-ai-reason"><Sparkles size={13} /><div><b>Why this match</b><p>{candidate.aiReason}</p>{candidate.aiGaps?.length > 0 && <small>Gaps to discuss: {candidate.aiGaps.join(' · ')}</small>}</div></div>}<details><summary><FileText size={14} /> View shared ATS resume</summary><pre>{candidate.resume}</pre></details><button className="primary" onClick={() => void sendOffer(candidate.id)} disabled={busy || Boolean(candidate.existingOffer)}><Send size={14} />{candidate.existingOffer ? 'Offer already sent' : 'Send job offer'}</button></article>)}</div> : <div className="owner-empty"><Users /><h3>No matches for this role yet</h3><p>Matching starts at 50% skill match. Students must reach 70 readiness points, complete their roadmap and one project, confirm interview readiness, and opt into sharing.</p></div>}
         </Panel>
+        {overview && <CompanySimulationManager jobs={overview.jobs} say={say} />}
       </div>}
       {overview && <div className="company-privacy-note"><ShieldCheck size={16} /><p>Candidate details are shared only after each student explicitly opts in. Their profile disappears from search when they turn sharing off or revoke interview readiness.</p></div>}
     </main>
-  </div>;
+  </div>
+}
+
+function CompanySimulationManager({ jobs, say }: { jobs: Record<string, any>[]; say: (message: string, type?: ToastState['type']) => void }) {
+  const [simulations, setSimulations] = useState<Record<string, any>[]>([]);
+  const [submissions, setSubmissions] = useState<Record<string, any>[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [selectedJob, setSelectedJob] = useState('');
+  const [drafts, setDrafts] = useState<Record<string, { score: string; feedback: string }>>({});
+  const load = async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase.functions.invoke('company-dashboard', { body: { action: 'list-simulations' } });
+    if (error) return say(await functionErrorMessage(error, 'Could not load company simulations'), 'error');
+    if (data?.error) return say(data.error, 'error');
+    setSimulations(data?.simulations || []);
+    setSubmissions(data?.submissions || []);
+  };
+  useEffect(() => { if (!selectedJob && jobs[0]?.id) setSelectedJob(jobs[0].id); }, [jobs, selectedJob]);
+  useEffect(() => { void load(); }, []);
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!supabase) return;
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('company-dashboard', { body: { action: 'create-simulation', jobId: selectedJob, title: form.get('simulation_title'), instructions: form.get('simulation_instructions'), requiredSkills: String(form.get('simulation_skills') || '').split(',').map((skill) => skill.trim()).filter(Boolean), deadline: form.get('simulation_deadline') || undefined } });
+      if (error) throw new Error(await functionErrorMessage(error, 'Could not publish work simulation'));
+      if (data?.error) throw new Error(data.error);
+      event.currentTarget.reset();
+      say('Company work simulation published for students.', 'success');
+      await load();
+    } catch (error) { say(dbMessage(error, 'Could not publish work simulation'), 'error'); }
+    finally { setBusy(false); }
+  };
+  const review = async (submission: Record<string, any>, status: string) => {
+    if (!supabase) return;
+    const draft = drafts[submission.id] || { score: '', feedback: '' };
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('company-dashboard', { body: { action: 'review-simulation', submissionId: submission.id, status, score: draft.score ? Number(draft.score) : undefined, feedback: draft.feedback } });
+      if (error) throw new Error(await functionErrorMessage(error, 'Could not review simulation'));
+      if (data?.error) throw new Error(data.error);
+      say(data?.message || 'Review saved', 'success');
+      await load();
+    } catch (error) { say(dbMessage(error, 'Could not review simulation'), 'error'); }
+    finally { setBusy(false); }
+  };
+  return <Panel className="company-simulation-panel"><div className="company-section-head"><div><h2>Work simulations</h2><p>Post a small role task, review real submissions, and shortlist based on demonstrated work.</p></div><Target size={18} /></div>
+    {jobs.filter((job) => job.status === 'open').length ? <form className="company-job-form" onSubmit={create}>
+      <label>Role<select value={selectedJob} onChange={(event) => setSelectedJob(event.target.value)} required>{jobs.filter((job) => job.status === 'open').map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}</select></label>
+      <label>Task title<input name="simulation_title" placeholder="e.g. Find three insights in this sales data" minLength={3} maxLength={160} required /></label>
+      <label>Task instructions<textarea name="simulation_instructions" rows={3} minLength={20} maxLength={6000} placeholder="Describe the sample task, expected deliverable, and what a good submission demonstrates." required /></label>
+      <label>Skills to demonstrate<input name="simulation_skills" placeholder="SQL, data storytelling" /><small>Separate skills with commas.</small></label>
+      <label>Submission deadline (optional)<input name="simulation_deadline" type="datetime-local" /></label>
+      <button className="primary" disabled={busy || !selectedJob}>{busy ? 'Publishing…' : 'Publish company challenge'} <ArrowRight size={14} /></button>
+    </form> : <div className="owner-empty"><p>Publish a role before creating its matching work simulation.</p></div>}
+    {!simulations.length ? <p className="company-simulation-empty">No simulations posted yet. Students will see published tasks in Opportunities.</p> : <div className="company-simulations-list">{simulations.map((simulation) => <article className="company-simulation-card" key={simulation.id}><small>{jobs.find((job) => job.id === simulation.job_id)?.title || 'Role'} · {simulation.status}</small><h3>{simulation.title}</h3><p>{simulation.instructions}</p><div className="tags">{(simulation.expected_skills || []).map((skill: string) => <i key={skill}>{skill}</i>)}</div>{submissions.filter((submission) => submission.simulation_id === simulation.id).map((submission) => { const draft = drafts[submission.id] || { score: String(submission.score ?? ''), feedback: submission.feedback || '' }; return <div className="company-simulation-submission" key={submission.id}><small>{submission.student?.full_name || 'Opted-in student'} · {new Date(submission.submitted_at).toLocaleDateString()} · {submission.status}</small>{submission.student?.course && <small>{submission.student.course}{submission.student.college ? ` · ${submission.student.college}` : ''}</small>}<p>{submission.answer}</p>{submission.project_url && <a href={submission.project_url} target="_blank" rel="noreferrer">Open submitted evidence <ArrowRight size={12} /></a>}<div className="simulation-review-fields"><label>Score / 100<input type="number" min="0" max="100" value={draft.score} onChange={(event) => setDrafts((old) => ({ ...old, [submission.id]: { ...draft, score: event.target.value } }))} /></label><label>Feedback<input value={draft.feedback} maxLength={4000} onChange={(event) => setDrafts((old) => ({ ...old, [submission.id]: { ...draft, feedback: event.target.value } }))} placeholder="Strengths and next step" /></label></div><div className="company-simulation-actions"><button className="secondary" disabled={busy} onClick={() => void review(submission, 'reviewing')}>Mark reviewing</button><button className="secondary" disabled={busy} onClick={() => void review(submission, 'not_selected')}>Not selected</button><button className="primary" disabled={busy} onClick={() => void review(submission, 'shortlisted')}>Shortlist for interview</button></div></div>; })}</article>)}</div>}
+    <small className="company-simulation-note">Only students who enabled employer sharing are identifiable to the company. Shortlisting is the company’s decision; submitting a task does not guarantee a job.</small>
+  </Panel>;
 }
 
 function MembershipGate({ c, feature }: { c: Ctx; feature: 'mentor' | 'classes' }) {
@@ -1979,8 +2150,8 @@ function readinessScore(records: Records) {
   const profile = records.profile;
   const profilePoints = ['full_name', 'course', 'college', 'career_goal', 'bio'].filter((key) => String(profile[key] || '').trim()).length * 3;
   const skillPoints = Math.min(20, records.skills.length * 4);
-  const completed = records.projects.filter((project) => Number(project.progress) === 100).length;
-  const projectPoints = Math.min(25, completed * 15 + Math.min(10, records.projects.filter((project) => Number(project.progress) > 0 && Number(project.progress) < 100).length * 2));
+  const completed = records.projects.filter((project) => project.status === 'completed').length;
+  const projectPoints = Math.min(25, completed * 15 + Math.min(10, records.projects.filter((project) => project.status !== 'completed' && Number(project.progress) > 0).length * 2));
   const practicePoints = Math.min(20, new Set(records.interviewSessions.map((session) => String(session.practice_date).slice(0, 10))).size * 5);
   const attendanceTotal = records.attendance.length;
   const attendanceRate = attendanceTotal ? records.attendance.filter((item) => ['present', 'late'].includes(item.attendance_status)).length / attendanceTotal : 0;
@@ -1991,7 +2162,7 @@ function readinessScore(records: Records) {
 
 function Overview({ c }: { c: Ctx }) {
   const [proofBusy, setProofBusy] = useState(false);
-  const completed = c.records.projects.filter((p) => p.progress === 100).length;
+  const completed = c.records.projects.filter((p) => p.status === 'completed').length;
   const practiceDays = new Set(c.records.interviewSessions.map((session) => String(session.practice_date).slice(0, 10)));
   const xp = practiceDays.size * 100;
   const streak = getPracticeStreak(practiceDays);
@@ -2133,7 +2304,7 @@ function Overview({ c }: { c: Ctx }) {
   );
 }
 
-type PracticeQuestion = { id: string; category: string; prompt: string };
+type PracticeQuestion = { id: string; category: string; prompt: string; sample: string };
 const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 function getPracticeStreak(dates: Set<string>) {
   const cursor = new Date();
@@ -2141,6 +2312,20 @@ function getPracticeStreak(dates: Set<string>) {
   let count = 0;
   while (dates.has(localDateKey(cursor))) { count += 1; cursor.setDate(cursor.getDate() - 1); }
   return count;
+}
+function getBestPracticeStreak(dates: Set<string>) {
+  const sorted = [...dates].sort();
+  let best = 0;
+  let run = 0;
+  let previous: Date | undefined;
+  for (const date of sorted) {
+    const current = new Date(`${date}T12:00:00`);
+    const difference = previous ? Math.round((current.getTime() - previous.getTime()) / 86400000) : 0;
+    run = difference === 1 ? run + 1 : 1;
+    best = Math.max(best, run);
+    previous = current;
+  }
+  return best;
 }
 function scorePracticeAnswer(answer: string) {
   const text = answer.trim();
@@ -2158,19 +2343,73 @@ function InterviewPractice({ c }: { c: Ctx }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [party, setParty] = useState(false);
+  const prepDateKey = `kariqo-interview-date:${c.userId}`;
+  const [interviewDate, setInterviewDate] = useState(() => storage.getItem(prepDateKey) || localDateKey(new Date(Date.now() + 7 * 86400000)));
+  const prepProgressKey = `kariqo-interview-prep-progress:${c.userId}:${interviewDate}`;
+  const [prepDone, setPrepDone] = useState<boolean[]>(() => {
+    try { const value = JSON.parse(storage.getItem(prepProgressKey) || '[]'); return Array.isArray(value) ? value : []; } catch { return []; }
+  });
+  const [finalAnswers, setFinalAnswers] = useState<number[]>([]);
+  const [finalScore, setFinalScore] = useState<number | null>(null);
+  const [finalTaken, setFinalTaken] = useState(false);
   const targetSkill = c.records.skills[0]?.name || 'your strongest skill';
-  const project = c.records.projects.find((item) => item.progress === 100) || c.records.projects[0];
+  const project = c.records.projects.find((item) => item.status === 'completed') || c.records.projects[0];
   const role = c.goal || 'your target role';
+  const questionPrompts: Record<string, string> = {};
   const questions: PracticeQuestion[] = [
-    { id: 'role', category: 'ROLE FIT', prompt: `Why are you preparing for ${role}, and what strengths would you bring to a team?` },
-    { id: 'skill', category: 'SKILL DEPTH', prompt: `Explain ${targetSkill} with a real example. What problem did you use it to solve, and what trade-offs did you consider?` },
-    { id: 'project', category: 'PROJECT PROOF', prompt: project ? `Walk me through “${project.title}”. What was your contribution, the hardest challenge, and the result?` : 'Describe one project you have built. What problem did it solve, and what would you improve next?' },
-    { id: 'behavior', category: 'BEHAVIOURAL · STAR', prompt: 'Tell me about a time you got stuck while learning or building. What was the situation, what did you do, and what happened?' },
+    { id: 'role', category: 'ROLE FIT', prompt: `Why are you preparing for ${role}, and what strengths would you bring to a team?`, sample: `“I’m preparing for ${role} because it matches the kind of problems I enjoy solving. My strongest current skill is [name a real skill]. I’m building evidence through [coursework or project], and I’d bring curiosity, clear communication, and a willingness to learn.”` },
+    { id: 'skill', category: 'SKILL DEPTH', prompt: `Explain ${targetSkill} with a real example. What problem did you use it to solve, and what trade-offs did you consider?`, sample: `“I used ${targetSkill} in [real project/task] to solve [specific problem]. I chose [approach] because [reason]. I checked the result by [test/measurement], and I would improve it next by [next step].”` },
+    { id: 'project', category: 'PROJECT PROOF', prompt: project ? `Walk me through “${project.title}”. What was your contribution, the hardest challenge, and the result?` : 'Describe one project you have built. What problem did it solve, and what would you improve next?', sample: `“The project was [name] and it addressed [problem]. My contribution was [your actual work]. The hardest part was [challenge], so I [action]. The result was [honest outcome], and next I would improve [one thing].”` },
+    { id: 'behavior', category: 'BEHAVIOURAL · STAR', prompt: 'Tell me about a time you got stuck while learning or building. What was the situation, what did you do, and what happened?', sample: '“Situation: [context]. Task: I needed to [goal]. Action: I [specific steps and why]. Result: [what changed or what you learned].” This STAR structure is a guide—use a real example.' },
   ];
+  questions.forEach((question) => { questionPrompts[question.id] = question.prompt; });
   const sessions = c.records.interviewSessions;
   const practiceDays = new Set(sessions.map((session) => String(session.practice_date).slice(0, 10)));
   const xp = practiceDays.size * 100;
   const streak = getPracticeStreak(practiceDays);
+  const bestStreak = getBestPracticeStreak(practiceDays);
+  const streakBonus = (bestStreak >= 7 ? 250 : 0) + (bestStreak >= 14 ? 500 : 0) + (bestStreak >= 30 ? 1500 : 0);
+  const interviewDayDelta = Math.ceil((new Date(`${interviewDate || today}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86400000);
+  const interviewDaysLeft = Number.isFinite(interviewDayDelta) ? Math.max(1, Math.min(7, interviewDayDelta)) : 7;
+  const prepPlan = makeShortInterviewPlan(role, interviewDaysLeft);
+  const prepComplete = prepPlan.length > 0 && prepPlan.every((_, index) => Boolean(prepDone[index]));
+  const finalQuiz = makeInterviewReadinessQuiz(role);
+
+  useEffect(() => {
+    try { const value = JSON.parse(storage.getItem(prepProgressKey) || '[]'); setPrepDone(Array.isArray(value) ? value : []); } catch { setPrepDone([]); }
+  }, [prepProgressKey]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(storage.getItem(`kariqo-interview-readiness:${c.userId}:${interviewDate}`) || 'null');
+      if (saved && Array.isArray(saved.answers) && saved.answers.length === makeInterviewReadinessQuiz(role).length) {
+        setFinalAnswers(saved.answers);
+        setFinalScore(Number(saved.score));
+        setFinalTaken(true);
+      } else { setFinalAnswers([]); setFinalScore(null); setFinalTaken(false); }
+    } catch { setFinalAnswers([]); setFinalScore(null); setFinalTaken(false); }
+  }, [c.userId, interviewDate, role]);
+
+  const saveInterviewDate = (value: string) => {
+    setInterviewDate(value);
+    storage.setItem(prepDateKey, value);
+  };
+
+  const togglePrepDay = (index: number) => {
+    setPrepDone((current) => {
+      const updated = prepPlan.map((_, itemIndex) => itemIndex === index ? !current[itemIndex] : Boolean(current[itemIndex]));
+      storage.setItem(prepProgressKey, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const submitFinalReadiness = () => {
+    if (finalAnswers.length !== finalQuiz.length || finalQuiz.some((_, index) => finalAnswers[index] === undefined || finalAnswers[index] < 0)) return c.say('Answer all five readiness questions first.', 'info');
+    const score = Math.round(finalQuiz.reduce((sum, question, index) => sum + (finalAnswers[index] === question.answer ? 1 : 0), 0) / finalQuiz.length * 100);
+    setFinalScore(score);
+    setFinalTaken(true);
+    storage.setItem(`kariqo-interview-readiness:${c.userId}:${interviewDate}`, JSON.stringify({ score, answers: finalAnswers, at: new Date().toISOString() }));
+  };
 
   useEffect(() => {
     if (todaySession?.answers && typeof todaySession.answers === 'object') setAnswers(todaySession.answers);
@@ -2187,11 +2426,12 @@ function InterviewPractice({ c }: { c: Ctx }) {
     setLoadError('');
     try {
       const { error } = await supabase.from('skillvo_interview_practice').upsert({
-        user_id: c.userId, practice_date: today, career_goal: role, answers, score, completed_at: new Date().toISOString(),
+        user_id: c.userId, practice_date: today, career_goal: role, answers: { ...answers, __questionPrompts: questionPrompts }, score, completed_at: new Date().toISOString(),
       }, { onConflict: 'user_id,practice_date' });
       if (error) throw error;
       await c.refresh();
       setSaved(true);
+      if (!todaySession) setParty(true);
       c.say('Daily interview drill saved · +100 XP!', 'success');
     } catch (error) {
       const message = dbMessage(error, 'Could not save interview practice');
@@ -2205,42 +2445,167 @@ function InterviewPractice({ c }: { c: Ctx }) {
   const latestScore = saved ? Math.round(questions.reduce((sum, question) => sum + scorePracticeAnswer(answers[question.id] || '').score, 0) / questions.length) : todaySession?.score;
   return <>
     <Head tag="PRACTICE · REFLECT · IMPROVE" title="Interview Practice" desc={`A private role-focused drill for ${role}. Your answers stay in your Kariqo account.`} />
-    <div className="interview-practice-stats"><Panel><Flame size={18} /><b>{streak}</b><small>day streak</small></Panel><Panel><Trophy size={18} /><b>{xp}</b><small>XP · Level {Math.floor(xp / 300) + 1}</small></Panel><Panel><MessageSquareText size={18} /><b>{sessions.length}</b><small>practice days</small></Panel></div>
-    <Panel className="interview-practice-intro"><div><small>TODAY'S QUEST · +100 XP</small><h2>Answer four questions using your real learning evidence.</h2><p>We check for a clear explanation, a concrete action, structure, and an outcome. This rubric runs inside Kariqo; it does not send your answers to an AI provider.</p></div><span>{todaySession ? 'Saved today' : 'Not yet completed'}</span></Panel>
+    <div className="interview-practice-stats"><Panel><Flame size={18} /><b>{streak}</b><small>day streak · best {bestStreak}</small></Panel><Panel><Trophy size={18} /><b>{xp + streakBonus}</b><small>XP · Level {Math.floor((xp + streakBonus) / 300) + 1}</small></Panel><Panel><MessageSquareText size={18} /><b>{sessions.length}</b><small>practice days</small></Panel></div>
+    <Panel className="short-interview-prep"><div className="short-prep-heading"><div><small>TIME-BOXED · HIGH-YIELD PREP</small><h2>Interview soon? Study the essentials first.</h2><p>Pick your interview date. Kiko makes a short daily plan around your role, projects, and core interview topics—no deep syllabus.</p></div><span className="short-prep-countdown">{interviewDaysLeft}<small>day{interviewDaysLeft === 1 ? '' : 's'} left</small></span></div><div className="short-prep-controls"><label>Interview date<input type="date" min={today} value={interviewDate} onChange={(event) => saveInterviewDate(event.target.value)} /></label><span>About 25–40 minutes a day · {prepDone.filter(Boolean).length}/{prepPlan.length} days checked</span></div><div className="short-prep-days">{prepPlan.map((item, index) => <label className={prepDone[index] ? 'done' : ''} key={`${index}-${item.title}`}><input type="checkbox" checked={Boolean(prepDone[index])} onChange={() => togglePrepDay(index)} /><span><small>DAY {index + 1} · {item.minutes} MIN</small><b>{item.title}</b><em>{item.detail}</em></span>{prepDone[index] && <Check size={15} />}</label>)}</div><small className="short-prep-note">This plan helps prioritize revision; it can’t predict interview questions or guarantee an outcome.</small></Panel>
+    <Panel className={`interview-final-check ${prepComplete ? 'unlocked' : ''}`}><div className="interview-final-head"><div><small>FINAL READINESS CHECK · 5 QUESTIONS</small><h2>{prepComplete ? 'Quick check: are you interview-ready?' : 'Finish your prep plan to unlock the final test'}</h2><p>{prepComplete ? 'Answer five role-focused essentials. A missed answer shows the topic to revise; this score is guidance, not a hiring decision.' : `Complete each of your ${prepPlan.length} short-prep days above. Then this test unlocks.`}</p></div><span>{prepComplete ? 'UNLOCKED' : <LockKeyhole size={16} />}</span></div>
+      {prepComplete && <>{finalQuiz.map((question, index) => <fieldset className="interview-final-question" key={question.prompt}><legend>{index + 1}. {question.prompt}</legend>{question.choices.map((choice, choiceIndex) => <label key={choice}><input type="radio" name={`readiness-${index}`} checked={finalAnswers[index] === choiceIndex} onChange={() => setFinalAnswers((old) => { const next = [...old]; next[index] = choiceIndex; return next; })} />{choice}</label>)}</fieldset>)}<div className="interview-final-actions"><button className="primary" onClick={submitFinalReadiness}>{finalTaken ? 'Retake readiness test' : 'Check my readiness'} <ArrowRight size={14} /></button>{finalScore !== null && <div className={`interview-final-result ${finalScore >= 70 ? 'ready' : 'review'}`}><b>{finalScore >= 70 ? `You’re looking ready · ${finalScore}%` : `Keep practising · ${finalScore}%`}</b><span>{finalQuiz.filter((question, index) => finalAnswers[index] !== question.answer).length ? `Revise: ${finalQuiz.filter((question, index) => finalAnswers[index] !== question.answer).map((question) => question.topic).join(', ')}.` : 'All five essentials correct. Keep your project story and questions ready.'}</span></div>}</div></>}
+    </Panel>
+    <Panel className="interview-practice-intro"><div><small>TODAY'S QUEST · +100 XP</small><h2>Answer four questions using your real learning evidence.</h2><p>Open-ended questions don’t have one exact answer. Kariqo shows a strong answer example and points out what your response can improve. Your answers stay in your account.</p></div><span>{todaySession ? 'Saved today' : 'Not yet completed'}</span></Panel>
+    {streakBonus > 0 && <Panel className="streak-reward"><Flame size={16} /><div><b>Streak reward unlocked: +{streakBonus} XP</b><small>Best streak {bestStreak} days · Milestones: 7, 14 and 30 days</small></div></Panel>}
     <div className="interview-question-list">{questions.map((question, index) => {
       const rubric = scorePracticeAnswer(answers[question.id] || '');
-      return <Panel className="interview-question" key={question.id}><div className="interview-question-heading"><span>{String(index + 1).padStart(2, '0')}</span><div><small>{question.category}</small><h2>{question.prompt}</h2></div><b>{rubric.score}%</b></div><textarea value={answers[question.id] || ''} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} placeholder="Write your answer with a specific example…" rows={4} maxLength={2500} /><div className="interview-rubric"><span className={rubric.complete ? 'met' : ''}>Clear answer</span><span className={rubric.evidence ? 'met' : ''}>Your action or evidence</span><span className={rubric.structure ? 'met' : ''}>Logical structure</span><span className={rubric.outcome ? 'met' : ''}>Result or measurable outcome</span></div></Panel>;
+      const improve = [!rubric.complete && 'Add a clear, specific explanation.', !rubric.evidence && 'Include what you personally did and a real example.', !rubric.structure && 'Organize it as situation/task → action → result.', !rubric.outcome && 'Finish with the result, impact, or what you learned.'].filter(Boolean);
+      return <Panel className="interview-question" key={question.id}><div className="interview-question-heading"><span>{String(index + 1).padStart(2, '0')}</span><div><small>{question.category}</small><h2>{question.prompt}</h2></div><b>{rubric.score}%</b></div><textarea value={answers[question.id] || ''} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} placeholder="Write your answer with a specific example…" rows={4} maxLength={2500} /><div className="interview-rubric"><span className={rubric.complete ? 'met' : ''}>Clear answer</span><span className={rubric.evidence ? 'met' : ''}>Your action or evidence</span><span className={rubric.structure ? 'met' : ''}>Logical structure</span><span className={rubric.outcome ? 'met' : ''}>Result or measurable outcome</span></div><details className="answer-guide"><summary>{rubric.score < 75 ? 'See a strong sample answer and what to improve' : 'See a strong sample answer'}</summary><p><b>Sample answer guide</b><br />{question.sample}</p>{rubric.score < 75 && <p><b>Strengthen your answer:</b> {improve.join(' ')}</p>}</details></Panel>;
     })}</div>
     {loadError && <div className="interview-save-error"><AlertCircle size={15} /> {loadError}</div>}
     <Panel className="interview-save-panel"><div><small>YOUR PRACTICE CHECK-IN</small><h2>{typeof latestScore === 'number' ? `Readiness rubric: ${latestScore}%` : 'Ready to save today’s practice?'}</h2><p>{typeof latestScore === 'number' ? 'Use the checklist above to choose one answer to strengthen next. Scores are a self-practice guide, not a hiring decision.' : 'Your answers are private to your account. Saving your first completed drill today earns 100 XP.'}</p></div><button className="primary" onClick={() => void completePractice()} disabled={busy}>{busy ? 'Saving…' : todaySession ? 'Update today’s practice' : 'Complete today’s quest'} <ArrowRight size={14} /></button></Panel>
-    {sessions.length > 0 && <Panel className="interview-history"><h2>Practice history</h2>{sessions.slice(0, 8).map((session) => <div key={session.id} className="interview-history-row"><span>{new Date(`${String(session.practice_date).slice(0,10)}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</span><span>{session.career_goal || 'Career practice'}</span><b>{session.score}%</b></div>)}</Panel>}
+    {sessions.length > 0 && <Panel className="interview-history"><h2>Practice history</h2>{sessions.slice(0, 8).map((session) => <details key={session.id} className="interview-history-entry"><summary><span>{new Date(`${String(session.practice_date).slice(0,10)}T12:00:00`).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</span><span>{session.career_goal || 'Career practice'}</span><b>{session.score}%</b></summary><div>{questions.map((question) => <article key={question.id}><small>{question.category} · {session.answers?.__questionPrompts?.[question.id] || question.prompt}</small><p>{session.answers?.[question.id] || 'No saved answer'}</p></article>)}</div></details>)}</Panel>}
+    {party && <CelebrationOverlay title="Interview quest complete!" description={`Great work, ${c.records.profile.full_name?.split(' ')[0] || 'macha'}! You earned 100 XP and built your practice streak.`} onClose={() => setParty(false)} />}
   </>;
+}
+
+function makeShortInterviewPlan(role: string, days: number) {
+  const normalized = role.toLowerCase();
+  const core = normalized.includes('data') || normalized.includes('analyst')
+    ? 'Revise SQL joins and aggregations, spreadsheet basics, and how to explain one chart or metric.'
+    : normalized.includes('frontend') || normalized.includes('react') || normalized.includes('web')
+      ? 'Revise JavaScript fundamentals, React state/props, browser basics, and one debugging example.'
+      : normalized.includes('python') || normalized.includes('backend') || normalized.includes('software') || normalized.includes('developer')
+        ? 'Revise the language basics, data structures, API/database fundamentals, and one problem-solving example.'
+        : `Pick the top three skills in the ${role} job description and revise only their basic concepts.`;
+  const week = [
+    { title: 'Decode the role', detail: 'Read the job description; mark the 3 most repeated requirements and match each to something you have studied or built.', minutes: 25 },
+    { title: 'Revise core must-knows', detail: core, minutes: 35 },
+    { title: 'Prepare one project story', detail: 'Explain the problem, your own contribution, one challenge, and the result in 90 seconds. Be honest about what is unfinished.', minutes: 30 },
+    { title: 'Practise common questions', detail: 'Answer “Tell me about yourself”, “Why this role?”, and one role-specific fundamentals question aloud.', minutes: 30 },
+    { title: 'Build one STAR example', detail: 'Prepare one real teamwork or problem-solving story: Situation, Task, Action, Result. Keep your action specific.', minutes: 25 },
+    { title: 'Do a short mock round', detail: 'Answer 4 questions without notes. Review only the two answers that felt weakest and fix those.', minutes: 35 },
+    { title: 'Light final review', detail: 'Scan your 3 must-knows and project story, prepare 2 questions for the interviewer, then stop and rest.', minutes: 20 },
+  ];
+  if (days >= 7) return week;
+  if (days === 1) return [{ title: 'One-day essentials', detail: `15 min: identify 3 requirements. 20 min: revise the core must-knows (${core}). 15 min: rehearse one project story and “Tell me about yourself”. 10 min: prepare 2 questions and rest.`, minutes: 60 }];
+  if (days === 2) return [
+    { title: 'Role essentials + one proof story', detail: `Read the role description, revise the top 3 basics (${core}), then prepare one project example with your contribution and result.`, minutes: 40 },
+    { title: 'Practise what interviewers ask most', detail: 'Rehearse “Tell me about yourself”, “Why this role?”, one STAR example, and 2 role questions. Review weak answers only.', minutes: 40 },
+  ];
+  if (days === 3) return [
+    { title: 'Focus on the job requirements', detail: `Mark the top 3 requirements and revise their basics (${core}).`, minutes: 35 },
+    { title: 'Prepare project + behavioural proof', detail: 'Practise one project walkthrough and one STAR story using real examples.', minutes: 35 },
+    { title: 'Mock + final review', detail: 'Answer 4 common questions aloud, fix the 2 weakest, prepare questions for the interviewer, and rest.', minutes: 35 },
+  ];
+  return week.slice(0, days);
+}
+
+function makeInterviewReadinessQuiz(role: string): { prompt: string; choices: string[]; answer: number; topic: string }[] {
+  const normalized = role.toLowerCase();
+  const roleQuestion = normalized.includes('data') || normalized.includes('analyst')
+    ? { prompt: 'When comparing two groups, what is a good first step?', choices: ['Check that the metric and time period are comparable', 'Choose the group with the bigger number', 'Remove every unusual value', 'Assume the difference is causal'], answer: 0, topic: 'data comparison and metrics' }
+    : normalized.includes('frontend') || normalized.includes('react') || normalized.includes('web')
+      ? { prompt: 'In React, what should you use when a value changes and the UI must update?', choices: ['A local variable only', 'Component state', 'A CSS comment', 'A new browser tab'], answer: 1, topic: 'React state' }
+      : { prompt: 'When a solution fails an edge case, what is the best next step?', choices: ['Hide the failing case', 'Rewrite everything immediately', 'Reproduce it, inspect the input, and add a focused fix/test', 'Assume the reviewer used it incorrectly'], answer: 2, topic: 'debugging and edge cases' };
+  return [
+    { prompt: 'Before solving a task, what should you clarify first?', choices: ['The expected output and constraints', 'The colour of the UI', 'The company’s entire history', 'Nothing; start coding immediately'], answer: 0, topic: 'problem clarification' },
+    roleQuestion,
+    { prompt: 'Which project explanation is strongest in an interview?', choices: ['“I did everything” with no detail', 'Problem, your contribution, approach, and honest result', 'Only the tech stack names', 'A result you cannot verify'], answer: 1, topic: 'project evidence and communication' },
+    { prompt: 'If you do not know an answer in an interview, what is a strong response?', choices: ['Invent a confident answer', 'Stay silent', 'Explain what you do know and how you would find or test the rest', 'Blame the question'], answer: 2, topic: 'reasoning under uncertainty' },
+    { prompt: 'How should you describe a skill you used in a project?', choices: ['Name a real example and what you personally did', 'Claim expert level without evidence', 'List tools you have never used', 'Copy another candidate’s story'], answer: 0, topic: 'evidence-backed skills' },
+  ];
+}
+
+function CelebrationOverlay({ title, description, onClose }: { title: string; description: string; onClose: () => void }) {
+  return <div className="kiko-party-overlay" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="kiko-party-confetti" aria-hidden="true">{Array.from({ length: 42 }, (_, i) => <i key={i} style={{ left: `${(i * 37) % 100}%`, animationDelay: `${(i % 12) * -0.19}s`, animationDuration: `${3.1 + (i % 7) * 0.32}s` }} />)}</div>
+    <section className="kiko-party-card"><span className="kiko-party-kicker">KARIQO · KIKO CELEBRATES</span><div className="kiko-party-pet"><BuddyCreature mood="excited" appreciating /></div><h2>{title}</h2><p>{description}</p><button className="primary" onClick={onClose}>Continue learning <ArrowRight size={14} /></button></section>
+  </div>;
+}
+
+type SkillCheckQuestion = { prompt: string; choices: string[]; answer: number; why: string };
+const SKILL_CHECKS: Record<string, SkillCheckQuestion[]> = {
+  python: [
+    { prompt: 'Which Python value is mutable?', choices: ['tuple', 'string', 'list', 'int'], answer: 2, why: 'Lists can be changed in place; tuples, strings and integers are immutable.' },
+    { prompt: 'What does a dictionary store?', choices: ['Only ordered numbers', 'Key–value pairs', 'A fixed-size array only', 'Compiled machine code'], answer: 1, why: 'A dict maps unique keys to values for lookup.' },
+    { prompt: 'What does `with open(path) as file:` help ensure?', choices: ['The file is closed after the block', 'The file is encrypted', 'The file is sorted', 'The file is always writable'], answer: 0, why: 'A context manager closes the file even if the block raises an error.' },
+    { prompt: 'What is the usual purpose of a Python virtual environment?', choices: ['Speed up the CPU', 'Isolate project dependencies', 'Host a website', 'Convert Python to SQL'], answer: 1, why: 'Virtual environments keep each project’s package versions separate.' },
+    { prompt: 'A function should return the larger of a and b. Which expression is correct?', choices: ['return a + b', 'return max(a, b)', 'print(a, b)', 'return a == b'], answer: 1, why: '`max(a, b)` returns the greater comparable value.' },
+    { prompt: 'What does `try/except` let a program do?', choices: ['Handle expected runtime errors', 'Skip all testing', 'Make every value immutable', 'Install packages'], answer: 0, why: 'It catches selected exceptions so the program can respond safely.' },
+    { prompt: 'Which is a good first step when a Python test fails?', choices: ['Delete the test', 'Read the traceback and reproduce the failing case', 'Change random lines', 'Ignore the failure'], answer: 1, why: 'The traceback and a small reproducible case help locate the cause.' },
+  ],
+  javascript: [
+    { prompt: 'Which declaration cannot be reassigned?', choices: ['var', 'let', 'const', 'function'], answer: 2, why: '`const` prevents rebinding the variable (though referenced objects can still mutate).' },
+    { prompt: 'What does `Array.map()` return?', choices: ['A new transformed array', 'The first item only', 'A boolean', 'The original array length'], answer: 0, why: '`map` builds a new array from each callback result.' },
+    { prompt: 'What does `===` check?', choices: ['Value only after coercion', 'Strict value and type equality', 'Whether a value is truthy', 'Object property order'], answer: 1, why: 'Strict equality does not coerce operand types.' },
+    { prompt: 'Why use `await` inside an async function?', choices: ['Wait for a promise result before continuing', 'Repeat a loop forever', 'Create a class', 'Make a value private'], answer: 0, why: '`await` pauses that async function until the promise settles.' },
+    { prompt: 'What is event delegation?', choices: ['One ancestor handles bubbled events from descendants', 'Every element gets a timer', 'Events are sent to a server', 'Removing all listeners'], answer: 0, why: 'A parent listener can handle child events using the event target.' },
+    { prompt: 'What does `filter()` return?', choices: ['A new array containing matching items', 'A single index', 'A promise always', 'A sorted copy always'], answer: 0, why: '`filter` keeps the elements whose predicate returns true.' },
+    { prompt: 'When can a closure access a variable?', choices: ['Only during compilation', 'From its surrounding lexical scope', 'Only if it is global', 'Never after return'], answer: 1, why: 'Closures retain access to variables in their lexical environment.' },
+  ],
+  sql: [
+    { prompt: 'Which clause filters rows before grouping?', choices: ['HAVING', 'WHERE', 'ORDER BY', 'LIMIT'], answer: 1, why: '`WHERE` filters source rows before aggregation.' },
+    { prompt: 'Which clause filters aggregated groups?', choices: ['WHERE', 'HAVING', 'FROM', 'OFFSET'], answer: 1, why: '`HAVING` applies conditions after `GROUP BY` aggregation.' },
+    { prompt: 'What does a LEFT JOIN keep?', choices: ['Only matching rows from both tables', 'Every left row and matching right rows', 'Only right table rows', 'Only duplicate rows'], answer: 1, why: 'Unmatched left rows remain, with NULLs for right-side columns.' },
+    { prompt: 'What is a primary key?', choices: ['A column that uniquely identifies each row', 'A display label', 'A backup table', 'An index that permits duplicates only'], answer: 0, why: 'A primary key is unique and not null for each row.' },
+    { prompt: 'How should a query safely include a user-provided value?', choices: ['Concatenate raw text', 'Use a parameterized query', 'Disable validation', 'Put it in a comment'], answer: 1, why: 'Parameters separate data from SQL syntax and help prevent injection.' },
+    { prompt: 'What does `COUNT(*)` count?', choices: ['Only non-null values in one chosen column', 'Rows', 'Unique values only', 'Tables'], answer: 1, why: '`COUNT(*)` counts rows in the result set.' },
+    { prompt: 'Which index trade-off is generally true?', choices: ['Faster reads, extra storage and write cost', 'No storage cost', 'Always faster writes', 'It removes the need for constraints'], answer: 0, why: 'Indexes can speed lookups but take space and must be maintained on writes.' },
+  ],
+  react: [
+    { prompt: 'What should a React component do with props?', choices: ['Treat them as read-only inputs', 'Mutate them directly', 'Store them in localStorage automatically', 'Use them as SQL'], answer: 0, why: 'Props flow into a component as read-only inputs.' },
+    { prompt: 'What is a React key used for in a rendered list?', choices: ['Help React identify items between renders', 'Encrypt the list', 'Sort items alphabetically', 'Create CSS variables'], answer: 0, why: 'Stable keys help React match list items when they change.' },
+    { prompt: 'When is a state setter appropriate?', choices: ['To request a state update and re-render', 'To mutate the DOM directly', 'To define a route', 'To install a package'], answer: 0, why: 'State setters notify React to render with the new state.' },
+    { prompt: 'What should an effect cleanup do when needed?', choices: ['Undo subscriptions/timers from the effect', 'Delete all component state', 'Run before every click', 'Replace JSX'], answer: 0, why: 'Cleanup prevents stale subscriptions, timers, and related leaks.' },
+    { prompt: 'Why avoid mutating an object in state?', choices: ['React may not detect the update reliably', 'Objects cannot be rendered', 'It disables JavaScript', 'It always causes a network call'], answer: 0, why: 'Create a new object so identity changes and React can see the update.' },
+    { prompt: 'What is a controlled input?', choices: ['An input whose value is driven by React state', 'An input with no label', 'A browser extension', 'An input only for numbers'], answer: 0, why: 'React state is the source of truth for its displayed value.' },
+    { prompt: 'Where should a component-specific derived value usually come from?', choices: ['Compute it from current props/state', 'Duplicate it in unrelated state', 'Hard-code the last result', 'Store it in a global variable'], answer: 0, why: 'Derived values are often safest when computed from their source data.' },
+  ],
+};
+
+function getSkillCheck(name: string) {
+  const key = name.trim().toLowerCase().replace(/\s+/g, '');
+  if (key.includes('python')) return SKILL_CHECKS.python;
+  if (key === 'js' || key.includes('javascript')) return SKILL_CHECKS.javascript;
+  if (key === 'sql' || key.includes('sql')) return SKILL_CHECKS.sql;
+  if (key.includes('react')) return SKILL_CHECKS.react;
+  return null;
 }
 
 function DNA({ c }: { c: Ctx }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [skillName, setSkillName] = useState('');
+  const [check, setCheck] = useState<SkillCheckQuestion[] | null>(null);
+  const [selections, setSelections] = useState<number[]>([]);
+  const [result, setResult] = useState<{ score: number; correct: number; total: number } | null>(null);
+  const [party, setParty] = useState(false);
 
-  const save = async (e: FormEvent<HTMLFormElement>) => {
+  const startAssessment = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!supabase) return c.say('Kariqo backend is not connected', 'error');
-    const f = new FormData(e.currentTarget);
-    const name = String(f.get('name')).trim();
-    const score = Number(f.get('score'));
+    const form = new FormData(e.currentTarget);
+    const name = String(form.get('name') || '').trim();
+    const bank = getSkillCheck(name);
+    if (!bank) return c.say('Question assessment is currently available for Python, JavaScript, SQL and React.', 'info');
+    // Pick five questions at random so repeat checks vary.
+    const shuffled = [...bank].sort(() => Math.random() - 0.5).slice(0, 5);
+    setSkillName(name);
+    setCheck(shuffled);
+    setSelections(Array(shuffled.length).fill(-1));
+    setResult(null);
+  };
 
-    if (!name || !Number.isFinite(score) || score < 0 || score > 100) {
-      return c.say('Enter a skill name and a level from 0 to 100', 'error');
-    }
-
+  const saveAssessment = async () => {
+    if (!supabase || !c.userId) return c.say('Sign in to save your Skill DNA assessment.', 'error');
+    if (!check || selections.some((value) => value < 0)) return c.say('Answer every question to calculate your skill score.', 'info');
+    const correct = check.reduce((count, question, index) => count + (selections[index] === question.answer ? 1 : 0), 0);
+    const score = Math.round((correct / check.length) * 100);
     setBusy(true);
     try {
-      const { error } = await supabase.from('skills').upsert({ user_id: c.userId, name, score }, { onConflict: 'user_id,name' });
+      const { error } = await supabase.from('skills').upsert({ user_id: c.userId, name: skillName, score }, { onConflict: 'user_id,name' });
       if (error) throw error;
       await c.refresh();
-      setOpen(false);
-      c.say('Skill saved to your profile', 'success');
+      setResult({ score, correct, total: check.length });
+      if (score === 100) setParty(true);
+      c.say(score === 100 ? 'Perfect check — skill mastered! Kiko is celebrating.' : 'Quiz-based Skill DNA score saved.', 'success');
     } catch (e) {
-      c.say(dbMessage(e, 'Could not save skill'), 'error');
+      c.say(dbMessage(e, 'Could not save skill assessment'), 'error');
     } finally {
       setBusy(false);
     }
@@ -2263,7 +2628,7 @@ function DNA({ c }: { c: Ctx }) {
       <Head
         tag="YOUR CAPABILITIES"
         title="Skill DNA"
-        desc="Your skills, saved to your private profile."
+        desc="Skill levels come from a short knowledge check, not a manually selected percentage. Retake a check as you learn."
         action={
           <button className="primary" onClick={() => setOpen(true)}>
             <Plus size={16} /> Add a skill
@@ -2287,32 +2652,26 @@ function DNA({ c }: { c: Ctx }) {
             <h3>{k.name}</h3>
             <b>{k.score}%</b>
             <Progress value={k.score} />
-            <p>Updated {new Date(k.updated_at || Date.now()).toLocaleDateString()}</p>
+            <p>Recorded level · Retake to refresh with a quiz · {new Date(k.updated_at || Date.now()).toLocaleDateString()}</p>
+            <button className="secondary skill-reassess" onClick={() => { setSkillName(k.name); setCheck(null); setResult(null); setSelections([]); setOpen(true); }}>Retake assessment</button>
           </Panel>
         ))}
       </div>
       {!c.records.skills.length && (
         <Panel>
           <h3>No skills added yet</h3>
-          <p>Add skills with a self-assessed level. They will appear here in your account.</p>
+          <p>Add a skill, then answer a short quiz. Kariqo calculates and saves the score for you.</p>
           <button className="secondary" onClick={() => setOpen(true)} style={{ marginTop: '12px' }}>
             Add your first skill
           </button>
         </Panel>
       )}
-      {open && (
-        <EditorDialog title="Add a skill" busy={busy} onClose={() => setOpen(false)} onSubmit={save}>
-          <label>
-            Skill name
-            <input name="name" placeholder="e.g. JavaScript, React, Python, UI Design" required autoFocus />
-          </label>
-          <label>
-            Current level (0 - 100%)
-            <input name="score" type="number" min="0" max="100" defaultValue="50" required />
-            <small>Choose your proficiency level from 0 to 100.</small>
-          </label>
-        </EditorDialog>
-      )}
+      {open && <div className="skill-check-backdrop" role="dialog" aria-modal="true" aria-label="Skill DNA knowledge check"><section className="skill-check-modal">
+        <button className="skill-check-close" onClick={() => { setOpen(false); setCheck(null); setResult(null); }} aria-label="Close"><X size={18} /></button>
+        <small className="skill-check-kicker">SKILL DNA · KNOWLEDGE CHECK</small>
+        {!check ? <form onSubmit={startAssessment}><h2>Measure with questions</h2><p>Choose a supported skill. We’ll ask five changing questions and calculate your score automatically.</p><label>Skill name<input name="name" defaultValue={skillName} placeholder="Python, JavaScript, SQL or React" required autoFocus /></label><small className="skill-supported">Question checks available now: Python · JavaScript · SQL · React</small><div className="skill-check-actions"><button type="button" className="secondary" onClick={() => setOpen(false)}>Cancel</button><button type="submit" className="primary">Start assessment <ArrowRight size={14} /></button></div></form> : <><h2>{skillName} assessment</h2><p>Choose one answer for every question. Your percentage is calculated from correct answers.</p><div className="skill-check-questions">{check.map((question, index) => <article key={`${index}-${question.prompt}`}><b>{index + 1}. {question.prompt}</b>{question.choices.map((choice, choiceIndex) => <label key={choice}><input type="radio" name={`skill-q-${index}`} checked={selections[index] === choiceIndex} onChange={() => setSelections((current) => current.map((value, i) => i === index ? choiceIndex : value))} />{choice}</label>)}{result && <small className={selections[index] === question.answer ? 'skill-correct' : 'skill-wrong'}>{selections[index] === question.answer ? 'Correct. ' : `Review this: ${question.why}`}</small>}</article>)}</div>{result && <div className="skill-check-result"><b>{result.score}% · {result.correct}/{result.total} correct</b><p>{result.score === 100 ? 'You cleared this check. Kiko’s celebration means mastery of this quiz, and you can keep building real project evidence too.' : 'Review the explanations above, study the missed topics, then retake for a fresh set of questions.'}</p></div>}<div className="skill-check-actions">{result ? <button className="secondary" onClick={() => { setCheck(null); setResult(null); }}>Try another set</button> : <button className="secondary" onClick={() => setCheck(null)}>Back</button>}{result ? <button className="primary" onClick={() => { setOpen(false); setCheck(null); }}>Done</button> : <button className="primary" disabled={busy || selections.some((value) => value < 0)} onClick={() => void saveAssessment()}>{busy ? 'Calculating…' : 'Calculate my level'} <ArrowRight size={14} /></button>}</div></>}
+      </section></div>}
+      {party && <CelebrationOverlay title="Skill check mastered!" description={`Perfect ${result?.total}/${result?.total} on ${skillName}! Keep applying it in projects to grow real evidence.`} onClose={() => setParty(false)} />}
     </>
   );
 }
@@ -2320,6 +2679,23 @@ function DNA({ c }: { c: Ctx }) {
 function Roadmap({ c }: { c: Ctx }) {
   const [busy, setBusy] = useState(false);
   const record = c.records.roadmaps[0];
+  type WeekProgress = { activities: Record<number, number[]>; answers: Record<number, string[]>; completedTests: number[] };
+  const progressKey = `kariqo-week-progress:${c.userId}:${record?.id || record?.created_at || c.goal}`;
+  const [weekProgress, setWeekProgress] = useState<WeekProgress>({ activities: {}, answers: {}, completedTests: [] });
+
+  useEffect(() => {
+    try {
+      const saved = storage.getItem(progressKey);
+      setWeekProgress(saved ? JSON.parse(saved) : { activities: {}, answers: {}, completedTests: [] });
+    } catch {
+      setWeekProgress({ activities: {}, answers: {}, completedTests: [] });
+    }
+  }, [progressKey]);
+
+  const updateWeekProgress = (next: WeekProgress) => {
+    setWeekProgress(next);
+    storage.setItem(progressKey, JSON.stringify(next));
+  };
 
   const generate = async () => {
     if (!c.goal.trim()) {
@@ -2354,6 +2730,8 @@ function Roadmap({ c }: { c: Ctx }) {
   };
 
   const content = record?.content;
+  const roadmapWeeks: { week: number; title: string; activities: string[]; outcome: string }[] = content?.weeks || [];
+  const orderedWeekNumbers = roadmapWeeks.map((week, index) => Number(week.week || index + 1));
 
   return (
     <>
@@ -2426,24 +2804,70 @@ function Roadmap({ c }: { c: Ctx }) {
             </Panel>
           )}
 
-          {content?.weeks?.length > 0 && (
+          {roadmapWeeks.length > 0 && (
             <Panel>
               <h3>Your six-week plan</h3>
               <div className="roadmap-list">
-                {content.weeks.map((week: { week: number; title: string; activities: string[]; outcome: string }, i: number) => (
-                  <article key={week.week || i}>
-                    <span className="roadmap-number">{week.week || i + 1}</span>
+                {roadmapWeeks.map((week, i: number) => {
+                  const weekNumber = Number(week.week || i + 1);
+                  const activities = week.activities || [];
+                  const doneActivities = weekProgress.activities[weekNumber] || [];
+                  const quizDone = weekProgress.completedTests.includes(weekNumber);
+                  const orderedIndex = orderedWeekNumbers.indexOf(weekNumber);
+                  const previousWeek = orderedIndex > 0 ? orderedWeekNumbers[orderedIndex - 1] : null;
+                  const previousWeekActivities = previousWeek === null ? [] : (roadmapWeeks[orderedIndex - 1]?.activities || []);
+                  const previousTasksDone = previousWeek !== null && (previousWeekActivities.length === 0 || (weekProgress.activities[previousWeek] || []).length >= previousWeekActivities.length);
+                  const weekLocked = previousWeek !== null && (!weekProgress.completedTests.includes(previousWeek) || !previousTasksDone);
+                  const quizUnlocked = !weekLocked && (activities.length === 0 || doneActivities.length >= activities.length);
+                  const prompts = [
+                    `Explain the main idea in “${week.title}” in your own words.`,
+                    `What steps would you take to achieve this week's outcome: ${week.outcome || 'complete the planned activities'}?`,
+                    'What work or evidence would you show to prove you understand this week’s topic?',
+                  ];
+                  const testAnswers = weekProgress.answers[weekNumber] || [];
+                  const answerWordCounts = prompts.map((_, questionIndex) => (testAnswers[questionIndex] || '').trim().split(/\s+/).filter(Boolean).length);
+                  const canSubmitTest = answerWordCounts.every((count) => count >= 12);
+                  return <article className="roadmap-week-card" key={weekNumber}>
+                    <span className={`roadmap-number ${quizDone ? 'week-complete' : weekLocked ? 'week-locked' : ''}`}>{quizDone ? <Check size={14} /> : weekLocked ? <LockKeyhole size={13} /> : weekNumber}</span>
                     <div>
                       <b>{week.title}</b>
-                      <ul>
-                        {(week.activities || []).map((activity: string, j: number) => (
-                          <li key={j}>{activity}</li>
-                        ))}
+                      <small>{weekLocked ? `Locked · Pass Week ${previousWeek} test to unlock` : `${doneActivities.length}/${activities.length} activities complete`}</small>
+                      <ul className="roadmap-activities">
+                        {activities.map((activity: string, j: number) => <li key={j}>
+                          <label className={doneActivities.includes(j) ? 'activity-done' : ''}><input type="checkbox" checked={doneActivities.includes(j)} disabled={quizDone || weekLocked} onChange={(event) => {
+                            const nextIndexes = event.target.checked ? [...doneActivities, j] : doneActivities.filter((index) => index !== j);
+                            updateWeekProgress({ ...weekProgress, activities: { ...weekProgress.activities, [weekNumber]: nextIndexes } });
+                          }} /> <span>{activity}</span></label>
+                        </li>)}
                       </ul>
                       {week.outcome && <small>By the end: {week.outcome}</small>}
+                      <section className={`weekly-test ${quizUnlocked ? 'unlocked' : ''} ${weekLocked ? 'locked' : ''}`}>
+                        <div className="weekly-test-heading"><b>{weekLocked ? <LockKeyhole size={14} /> : quizDone ? <Check size={14} /> : <Target size={14} />} Week {weekNumber} test</b><small>{quizDone ? 'Passed · next week unlocked' : weekLocked ? `Pass Week ${previousWeek} first` : quizUnlocked ? 'Ready to take' : 'Tick every activity to unlock'}</small></div>
+                        {quizUnlocked && !quizDone && <>
+                          <p>Answer all three in your own words. Write at least 12 meaningful words for each answer to pass this learning checkpoint.</p>
+                          {prompts.map((prompt, questionIndex) => <label className="weekly-test-question" key={questionIndex}>
+                            <span>{questionIndex + 1}. {prompt}</span>
+                            <textarea value={weekProgress.answers[weekNumber]?.[questionIndex] || ''} maxLength={1000} rows={2} placeholder="Write your answer…" onChange={(event) => {
+                              const answers = [...(weekProgress.answers[weekNumber] || ['', '', ''])];
+                              answers[questionIndex] = event.target.value;
+                              updateWeekProgress({ ...weekProgress, answers: { ...weekProgress.answers, [weekNumber]: answers } });
+                            }} /><small className={answerWordCounts[questionIndex] >= 12 ? 'weekly-answer-ready' : 'weekly-answer-short'}>{answerWordCounts[questionIndex]}/12 words</small>
+                          </label>)}
+                          <button className="primary" onClick={() => {
+                            const answers = weekProgress.answers[weekNumber] || [];
+                            const wordCounts = prompts.map((_, index) => (answers[index] || '').trim().split(/\s+/).filter(Boolean).length);
+                            if (wordCounts.some((count) => count < 12)) return c.say('For a pass, answer all three questions with at least 12 meaningful words each.', 'error');
+                            updateWeekProgress({ ...weekProgress, completedTests: [...weekProgress.completedTests, weekNumber] });
+                            c.say(`Week ${weekNumber} test passed! Week ${weekNumber + 1} is unlocked.`, 'success');
+                          }} disabled={!canSubmitTest}>Pass test & unlock next week <ArrowRight size={14} /></button>
+                        </>}
+                        {weekLocked && <p>Finish all tasks and pass Week {previousWeek}’s test before this week’s tasks become available.</p>}
+                        {!weekLocked && !quizDone && !quizUnlocked && <p>Tick all {activities.length} activities above to open this week’s test.</p>}
+                        {quizDone && <p>Your test answers are saved on this browser. Week {weekNumber} is complete, and the next week is now available.</p>}
+                      </section>
                     </div>
-                  </article>
-                ))}
+                  </article>;
+                })}
               </div>
             </Panel>
           )}
@@ -2485,20 +2909,75 @@ function Roadmap({ c }: { c: Ctx }) {
   );
 }
 
+type CopilotMessage = { role: 'user' | 'assistant'; text: string; destination?: Page; image?: string; redirectToStudies?: boolean };
+type CopilotPhoto = { name: string; data: string; mimeType: string; preview: string };
+
+async function prepareCopilotPhoto(file: File): Promise<CopilotPhoto> {
+  if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');
+  if (file.size > 12 * 1024 * 1024) throw new Error('Choose an image smaller than 12 MB.');
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not open this image.')); };
+    img.src = url;
+  });
+  const scale = Math.min(1, 1280 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not prepare this image.');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error('Could not compress this image.')), 'image/jpeg', 0.82));
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read this image.'));
+    reader.readAsDataURL(blob);
+  });
+  return { name: file.name, data: dataUrl.split(',')[1], mimeType: 'image/jpeg', preview: dataUrl };
+}
+
 function CareerCopilot({ c }: { c: Ctx }) {
-  type CopilotMessage = { role: 'user' | 'assistant'; text: string; destination?: Page };
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [photo, setPhoto] = useState<CopilotPhoto | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [kikoNudge, setKikoNudge] = useState<CopilotMessage | null>(null);
   const [busy, setBusy] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
   const starters = ['What should I learn next?', 'Review my learning progress', 'Help me prepare for an interview'];
 
+  useEffect(() => {
+    if (!kikoNudge) return;
+    const timer = window.setTimeout(() => setKikoNudge(null), 9000);
+    return () => window.clearTimeout(timer);
+  }, [kikoNudge]);
+
+  useEffect(() => () => window.speechSynthesis?.cancel(), []);
+
+  const speakAsKiko = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const speech = new SpeechSynthesisUtterance(text.slice(0, 360));
+    speech.lang = 'en-IN';
+    speech.pitch = 1.12;
+    speech.rate = 0.94;
+    const voices = window.speechSynthesis.getVoices();
+    speech.voice = voices.find((voice) => /female|samantha|karen|zira|google.*english.*female/i.test(voice.name)) || voices.find((voice) => voice.lang.toLowerCase().startsWith('en-in')) || null;
+    window.speechSynthesis.speak(speech);
+  };
+
   const send = async (raw = draft) => {
-    const message = raw.trim();
-    if (!message || busy) return;
+    const attached = photo;
+    const message = raw.trim() || (attached ? 'Please look at this picture, explain what you can see, and answer my question about it.' : '');
+    if ((!message && !attached) || busy) return;
     if (!supabase) return c.say('Kariqo backend is not connected', 'error');
-    const nextMessages = [...messages, { role: 'user' as const, text: message }];
+    const nextMessages = [...messages, { role: 'user' as const, text: message, image: attached?.preview }];
     setMessages(nextMessages);
     setDraft('');
+    setPhoto(null);
     setBusy(true);
     try {
       const roadmap = c.records.roadmaps[0];
@@ -2515,13 +2994,19 @@ function CareerCopilot({ c }: { c: Ctx }) {
         availableFeatures: ['Skill DNA', 'AI Roadmap', 'Interview Practice', 'Projects', 'Skill Passport', 'Opportunities', 'Job Offers', 'Applications', 'Mentor', 'Live Classes'],
       };
       const { data, error } = await supabase.functions.invoke('career-copilot', {
-        body: { message, history: messages.slice(-8).map(({ role, text }) => ({ role, text })), context: snapshot },
+        body: { message, image: attached ? { mimeType: attached.mimeType, data: attached.data } : undefined, history: messages.slice(-8).map(({ role, text }) => ({ role, text })), context: snapshot },
       });
       if (error) throw new Error(await functionErrorMessage(error, 'Career Copilot could not reply'));
       if (data?.error) throw new Error(data.error);
       const allowedPages: Page[] = ['Skill DNA', 'AI Roadmap', 'Interview Practice', 'Projects', 'Skill Passport', 'Opportunities', 'Job Offers', 'Applications', 'Mentor', 'Live Classes', 'Profile & Settings'];
-      const destination = allowedPages.includes(data?.destination) ? data.destination as Page : undefined;
-      setMessages((items) => [...items, { role: 'assistant', text: String(data?.reply || 'I could not form a response. Try asking in a different way.'), destination }]);
+      const destination = allowedPages.includes(data?.destination) ? data.destination as Page : data?.redirectToStudies ? 'AI Roadmap' : undefined;
+      const reply = String(data?.reply || 'I could not form a response. Try asking in a different way.');
+      const assistantMessage: CopilotMessage = { role: 'assistant', text: reply, destination, redirectToStudies: data?.redirectToStudies === true };
+      setMessages((items) => [...items, assistantMessage]);
+      if (assistantMessage.redirectToStudies) {
+        setKikoNudge(assistantMessage);
+        window.setTimeout(() => speakAsKiko("Hey! Let's bring this back to your learning goal. Shall we check your roadmap?"), 650);
+      }
     } catch (error) {
       const messageText = dbMessage(error, 'Career Copilot is temporarily unavailable. Try again shortly.');
       setMessages((items) => [...items, { role: 'assistant', text: messageText }]);
@@ -2536,45 +3021,147 @@ function CareerCopilot({ c }: { c: Ctx }) {
       <div className="copilot-context"><span className="copilot-avatar"><Sparkles size={17} /></span><div><b>Your Kariqo Career Copilot</b><small>Uses your profile and learning activity to make relevant suggestions.</small></div><span className="copilot-context-count">{c.records.skills.length} skills · {c.records.projects.length} projects</span></div>
       <div className="copilot-messages" aria-live="polite">
         {!messages.length && <div className="copilot-welcome"><span><Sparkles size={20} /></span><h2>Let’s plan your next step.</h2><p>I can use your goal, Skill DNA, roadmap, projects, classes, and interview practice to give guidance that fits your progress.</p><div>{starters.map((starter) => <button key={starter} className="secondary" disabled={busy} onClick={() => void send(starter)}>{starter} <ArrowRight size={13} /></button>)}</div></div>}
-        {messages.map((item, index) => <article className={`copilot-message ${item.role}`} key={`${index}-${item.role}`}><span className="copilot-message-avatar">{item.role === 'assistant' ? <Sparkles size={14} /> : c.user.slice(0, 1).toUpperCase()}</span><div><small>{item.role === 'assistant' ? 'CAREER COPILOT' : 'YOU'}</small><p>{item.text}</p>{item.destination && <button className="copilot-destination" onClick={() => c.setPage(item.destination!)}>Open {item.destination} <ArrowRight size={13} /></button>}</div></article>)}
+        {messages.map((item, index) => <article className={`copilot-message ${item.role}`} key={`${index}-${item.role}`}><span className="copilot-message-avatar">{item.role === 'assistant' ? <Sparkles size={14} /> : c.user.slice(0, 1).toUpperCase()}</span><div><small>{item.role === 'assistant' ? 'CAREER COPILOT' : 'YOU'}</small>{item.image && <img className="copilot-photo-message" src={item.image} alt="Image attached for study analysis" />}<p>{item.text}</p>{item.destination && <button className="copilot-destination" onClick={() => c.setPage(item.destination!)}>Open {item.destination} <ArrowRight size={13} /></button>}</div></article>)}
         {busy && <div className="copilot-thinking"><Loader2 size={15} className="animate-spin" /> Looking at your Kariqo progress…</div>}
       </div>
-      <form className="copilot-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={2} maxLength={1200} placeholder="Ask about your next learning step, a project, or interview prep…" aria-label="Message Career Copilot" /><button className="primary" disabled={busy || !draft.trim()} aria-label="Send message">{busy ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}<span>Send</span></button><small>AI suggestions are guidance; verify important decisions. Enter to send · Shift + Enter for a new line.</small></form>
+      <form className="copilot-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+        {photo && <div className="copilot-photo-attachment"><img src={photo.preview} alt="Selected image preview" /><span>{photo.name} · sent to Kariqo AI for analysis</span><button type="button" aria-label="Remove attached photo" onClick={() => setPhoto(null)}><X size={14} /></button></div>}
+        <input ref={photoInput} className="copilot-photo-input" type="file" accept="image/*" aria-label="Attach a study image" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; setPhotoBusy(true); try { setPhoto(await prepareCopilotPhoto(file)); } catch (error) { c.say(error instanceof Error ? error.message : 'Could not prepare this image.', 'error'); } finally { setPhotoBusy(false); event.target.value = ''; } }} />
+        <button type="button" className="copilot-image-button" aria-label="Add a photo for AI analysis" title="Add a photo for AI analysis" disabled={photoBusy || busy} onClick={() => photoInput.current?.click()}>{photoBusy ? <Loader2 size={16} className="animate-spin" /> : <ImagePlus size={17} />}<span>{photoBusy ? 'Preparing…' : 'Photo'}</span></button>
+        <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={2} maxLength={1200} placeholder="Ask about your studies, attach a picture, or prepare for an interview…" aria-label="Message Career Copilot" />
+        <button className="primary" disabled={busy || photoBusy || (!draft.trim() && !photo)} aria-label="Send message">{busy ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}<span>Send</span></button>
+        <small>Images are sent to Kariqo AI (Gemini) for analysis. Avoid private or sensitive photos. Off-topic chat is gently redirected to your learning plan.</small>
+      </form>
     </Panel>
+    {kikoNudge && <div className="copilot-kiko-nudge" role="dialog" aria-live="polite" aria-label="Kiko study reminder"><div className="copilot-kiko-walker"><BuddyCreature mood="supportive" /></div><div className="copilot-kiko-speech"><small>KIKO · STUDY REMINDER</small><p>{kikoNudge.text}</p><button onClick={() => { c.setPage(kikoNudge.destination || 'AI Roadmap'); setKikoNudge(null); }}>Back to my studies <ArrowRight size={13} /></button><button className="copilot-kiko-close" aria-label="Close Kiko reminder" onClick={() => { window.speechSynthesis?.cancel(); setKikoNudge(null); }}><X size={14} /></button></div></div>}
   </>;
+}
+
+type GitHubProgressEstimate = { score: number; evidence: string[] };
+function parsePublicGitHubRepo(raw: string) {
+  try {
+    const parsed = new URL(raw.trim());
+    if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return null;
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    return { owner: parts[0], repo: parts[1].replace(/\.git$/i, '') };
+  } catch { return null; }
+}
+
+async function estimateGitHubProgress(repositoryUrl: string): Promise<GitHubProgressEstimate> {
+  const repository = parsePublicGitHubRepo(repositoryUrl);
+  if (!repository) throw new Error('Use a public GitHub repository link, such as https://github.com/owner/repository.');
+  const base = `https://api.github.com/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}`;
+  const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+  const repoResponse = await fetch(base, { headers });
+  if (repoResponse.status === 404) throw new Error('GitHub repo not found or private. Only public GitHub repositories can sync without connecting an account.');
+  if (repoResponse.status === 403) throw new Error('GitHub public API rate limit reached. Try refreshing later.');
+  if (!repoResponse.ok) throw new Error('Could not read this public GitHub repository.');
+  const repoData = await repoResponse.json();
+  if (repoData.private) throw new Error('This repository is private. Connect a GitHub account to sync it.');
+  const treeResponse = await fetch(`${base}/git/trees/${encodeURIComponent(repoData.default_branch)}?recursive=1`, { headers });
+  if (!treeResponse.ok) throw new Error('Could not read the repository file list. Check GitHub API access and try again.');
+  const treeData = await treeResponse.json();
+  const paths: string[] = (treeData.tree || []).filter((entry: { type: string }) => entry.type === 'blob').map((entry: { path: string }) => entry.path.toLowerCase());
+  const checks: [string, boolean, number][] = [
+    ['Source files', paths.some((path) => /\.(tsx?|jsx?|py|java|kt|go|rs|cs|php|rb|html|css|vue|svelte)$/.test(path) && !/(^|\/)(node_modules|dist|build|vendor)\//.test(path)), 30],
+    ['README', paths.some((path) => /(^|\/)readme(?:\.md|\.rst|\.txt)?$/.test(path)), 15],
+    ['Tests', paths.some((path) => /(^|\/)(__tests__|tests?|specs?)(\/|\.)/.test(path) || /\.(test|spec)\.[^.]+$/.test(path)), 15],
+    ['Project setup', paths.some((path) => /(^|\/)(package\.json|pyproject\.toml|requirements\.txt|pom\.xml|cargo\.toml|go\.mod|composer\.json|pubspec\.yaml)$/.test(path)), 10],
+    ['CI workflow', paths.some((path) => path.startsWith('.github/workflows/')), 10],
+    ['Deployment setup', paths.some((path) => /(^|\/)(netlify\.toml|vercel\.json|render\.yaml|dockerfile|\.dockerignore)$/.test(path)), 10],
+    ['Documentation or examples', paths.some((path) => /(^|\/)(docs|examples|screenshots)\//.test(path)), 10],
+  ];
+  const evidence = checks.filter(([, present]) => present).map(([label]) => label as string);
+  return { score: Math.min(100, 10 + checks.filter(([, present]) => present).reduce((sum, [, , points]) => sum + points, 0)), evidence };
 }
 
 function Projects({ c }: { c: Ctx }) {
   const [open, setOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Record<string, any> | null>(null);
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
 
-  const add = async (e: FormEvent<HTMLFormElement>) => {
+  const saveProject = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!supabase) return c.say('Kariqo backend is not connected', 'error');
+    if (!supabase || !c.userId) return c.say('Kariqo backend is not connected', 'error');
     const f = new FormData(e.currentTarget);
-    const title = String(f.get('title')).trim();
-    const description = String(f.get('description')).trim();
+    const title = String(f.get('title') || '').trim();
+    const description = String(f.get('description') || '').trim();
+    const repositoryUrl = String(f.get('repository_url') || '').trim();
+    const demoUrl = String(f.get('demo_url') || '').trim();
 
     if (!title) return c.say('Enter a project name', 'error');
+    if (repositoryUrl && !parsePublicGitHubRepo(repositoryUrl)) return c.say('Add a public GitHub repository link.', 'error');
+    if (demoUrl && !/^https:\/\//i.test(demoUrl)) return c.say('Live project links must start with https://.', 'error');
+    const parsedRepo = repositoryUrl ? parsePublicGitHubRepo(repositoryUrl) : null;
+    const normalizedRepoUrl = parsedRepo ? `https://github.com/${parsedRepo.owner}/${parsedRepo.repo}` : '';
     setBusy(true);
     try {
-      const { error } = await supabase.from('projects').insert({
-        user_id: c.userId,
+      const projectData = {
         title,
         description,
-        status: 'in_progress',
-        progress: 0,
-      });
+        repository_url: normalizedRepoUrl || null,
+        demo_url: demoUrl || null,
+        ...(repositoryUrl ? { progress: 0, progress_source: 'github', progress_checked_at: null } : {}),
+        ...(!repositoryUrl && editingProject?.repository_url ? { progress: 0, progress_source: 'manual', progress_checked_at: null } : {}),
+      };
+      const { error } = editingProject
+        ? await supabase.from('projects').update(projectData).eq('id', editingProject.id).eq('user_id', c.userId)
+        : await supabase.from('projects').insert({ user_id: c.userId, ...projectData, status: 'in_progress', progress: 0 });
       if (error) throw error;
       await c.refresh();
       setOpen(false);
-      c.say('Project saved to your account', 'success');
+      setEditingProject(null);
+      c.say(repositoryUrl ? 'Project saved. Public GitHub progress will sync automatically.' : 'Project saved to your account', 'success');
     } catch (e) {
       c.say(dbMessage(e, 'Could not save project'), 'error');
     } finally {
       setBusy(false);
     }
   };
+
+  const syncProject = async (project: Record<string, any>, quiet = false) => {
+    if (!supabase || !c.userId || !project.repository_url) return;
+    setSyncing((current) => ({ ...current, [project.id]: true }));
+    try {
+      const estimate = await estimateGitHubProgress(project.repository_url);
+      const { error } = await supabase.from('projects').update({
+        progress: estimate.score,
+        progress_source: `github:${estimate.evidence.join(',')}`,
+        progress_checked_at: new Date().toISOString(),
+      }).eq('id', project.id).eq('user_id', c.userId);
+      if (error) throw error;
+      await c.refresh();
+      if (!quiet) c.say(`GitHub repository synced · estimated progress ${estimate.score}%`, 'success');
+    } catch (error) {
+      if (!quiet) c.say(dbMessage(error, 'Could not sync GitHub repository'), 'error');
+    } finally {
+      setSyncing((current) => ({ ...current, [project.id]: false }));
+    }
+  };
+
+  const toggleProjectCompletion = async (project: Record<string, any>) => {
+    if (!supabase || !c.userId) return;
+    const status = project.status === 'completed' ? 'in_progress' : 'completed';
+    const { error } = await supabase.from('projects').update({ status }).eq('id', project.id).eq('user_id', c.userId);
+    if (error) return c.say(dbMessage(error, 'Could not update project status'), 'error');
+    await c.refresh();
+    c.say(status === 'completed' ? 'Project marked complete' : 'Project moved back to in progress', 'success');
+  };
+
+  const projectSyncKey = c.records.projects.map((project) => `${project.id}:${project.repository_url || ''}:${project.progress_checked_at || ''}`).join('|');
+  const syncDueProjects = () => {
+    const due = c.records.projects.filter((project) => project.repository_url && (!project.progress_checked_at || Date.now() - new Date(project.progress_checked_at).getTime() > 30 * 60 * 1000));
+    due.forEach((project) => void syncProject(project, true));
+  };
+  useEffect(() => { syncDueProjects(); }, [projectSyncKey]);
+  useEffect(() => {
+    const timer = window.setInterval(syncDueProjects, 30 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [projectSyncKey]);
+
+  const editProject = (project: Record<string, any>) => { setEditingProject(project); setOpen(true); };
 
   const remove = async (id: string) => {
     if (!supabase || !c.userId) return;
@@ -2593,9 +3180,9 @@ function Projects({ c }: { c: Ctx }) {
       <Head
         tag="LEARN BY DOING"
         title="Projects & challenges"
-        desc="Track projects you create and build evidence of your skills."
+        desc="Add your real project and public GitHub link. Kariqo checks repository structure and refreshes an estimated progress score."
         action={
-          <button className="primary" onClick={() => setOpen(true)}>
+          <button className="primary" onClick={() => { setEditingProject(null); setOpen(true); }}>
             <Plus size={16} /> New project
           </button>
         }
@@ -2616,25 +3203,12 @@ function Projects({ c }: { c: Ctx }) {
             <small>{p.status}</small>
             <h3>{p.title}</h3>
             <p>{p.description}</p>
+            {p.repository_url && <a className="project-repository-link" href={p.repository_url} target="_blank" rel="noreferrer">Open GitHub project <ArrowRight size={12} /></a>}
+            {p.demo_url && <a className="project-repository-link" href={p.demo_url} target="_blank" rel="noreferrer">Preview live project <ArrowRight size={12} /></a>}
+            <div className="project-progress-heading"><b>{Number(p.progress) || 0}%</b><small>{p.repository_url ? 'GitHub repository estimate' : 'Add GitHub link to estimate'}</small></div>
             <Progress value={p.progress} />
-            <button
-              onClick={async () => {
-                if (!supabase) return;
-                const progress = Math.min(100, p.progress + 20);
-                const { error } = await supabase
-                  .from('projects')
-                  .update({ progress, status: progress === 100 ? 'completed' : 'in_progress' })
-                  .eq('id', p.id)
-                  .eq('user_id', c.userId);
-                if (error) c.say(dbMessage(error, 'Could not update project'), 'error');
-                else {
-                  await c.refresh();
-                  c.say('Project progress saved', 'success');
-                }
-              }}
-            >
-              Update progress <ArrowRight size={14} />
-            </button>
+            <p className="project-progress-note">{String(p.progress_source || '').startsWith('github:') ? `GitHub structure estimate · ${String(p.progress_source).slice(7).replace(/,/g, ' · ') || 'repo checked'} · ${p.progress_checked_at ? new Date(p.progress_checked_at).toLocaleString() : 'syncing now'}` : p.repository_url ? 'GitHub sync pending' : 'Add a public GitHub link for automatic progress estimates.'}</p>
+            <div className="project-card-actions"><button className="secondary" onClick={() => editProject(p)}>Edit project</button><button className="secondary" onClick={() => void toggleProjectCompletion(p)}>{p.status === 'completed' ? 'Reopen project' : 'Mark project complete'}</button>{p.repository_url && <button className="primary" disabled={Boolean(syncing[p.id])} onClick={() => void syncProject(p)}>{syncing[p.id] ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} {syncing[p.id] ? 'Checking…' : 'Refresh estimate'}</button>}</div>
           </Panel>
         ))}
       </div>
@@ -2642,21 +3216,23 @@ function Projects({ c }: { c: Ctx }) {
         <Panel>
           <h3>No projects yet</h3>
           <p>Create a project to start tracking your work in Kariqo.</p>
-          <button className="secondary" onClick={() => setOpen(true)} style={{ marginTop: '12px' }}>
+          <button className="secondary" onClick={() => { setEditingProject(null); setOpen(true); }} style={{ marginTop: '12px' }}>
             Create project
           </button>
         </Panel>
       )}
       {open && (
-        <EditorDialog title="Create a project" busy={busy} onClose={() => setOpen(false)} onSubmit={add}>
+        <EditorDialog title={editingProject ? 'Edit project' : 'Create a project'} busy={busy} onClose={() => { setOpen(false); setEditingProject(null); }} onSubmit={saveProject}>
           <label>
             Project name
-            <input name="title" placeholder="e.g. Portfolio website, REST API Server" required autoFocus />
+            <input name="title" defaultValue={editingProject?.title || ''} placeholder="e.g. Portfolio website, REST API Server" required autoFocus />
           </label>
           <label>
             What are you building?
-            <textarea name="description" rows={4} placeholder="Describe your idea or outcome" />
+            <textarea name="description" defaultValue={editingProject?.description || ''} rows={4} placeholder="What problem does it solve? What did you build?" />
           </label>
+          <label>Public GitHub repository URL<input name="repository_url" type="url" defaultValue={editingProject?.repository_url || ''} placeholder="https://github.com/username/project" /><small>Public repositories only. GitHub structure gives an estimate, not verified feature completion.</small></label>
+          <label>Live project/demo URL<input name="demo_url" type="url" defaultValue={editingProject?.demo_url || ''} placeholder="https://your-project.example" /><small>Optional link reviewers can open to try your project.</small></label>
         </EditorDialog>
       )}
     </>
@@ -2666,7 +3242,7 @@ function Projects({ c }: { c: Ctx }) {
 function Passport({ c }: { c: Ctx }) {
   const p = c.records.profile;
   const [readinessBusy, setReadinessBusy] = useState(false);
-  const completedProjects = c.records.projects.filter((project) => Number(project.progress) === 100);
+  const completedProjects = c.records.projects.filter((project) => project.status === 'completed');
   const hasRoadmap = c.records.roadmaps.length > 0;
   const score = readinessScore(c.records);
   const interviewReady = Boolean(p.learning_complete && p.interview_ready && hasRoadmap && completedProjects.length > 0 && score >= 70);
@@ -2768,7 +3344,7 @@ function Passport({ c }: { c: Ctx }) {
               <small>Projects</small>
             </b>
             <b>
-              {c.records.projects.filter((x) => x.progress === 100).length}
+              {c.records.projects.filter((x) => x.status === 'completed').length}
               <small>Completed</small>
             </b>
           </div>
@@ -2812,7 +3388,7 @@ function Passport({ c }: { c: Ctx }) {
 function JobOffers({ c }: { c: Ctx }) {
   const [busyOffer, setBusyOffer] = useState('');
   const passport = c.records.profile;
-  const completedProjects = c.records.projects.filter((project) => Number(project.progress) === 100).length;
+  const completedProjects = c.records.projects.filter((project) => project.status === 'completed').length;
   const readiness = [
     { label: 'Study roadmap completed', done: Boolean(passport.learning_complete) },
     { label: 'Portfolio project completed', done: completedProjects > 0 },
@@ -2851,6 +3427,10 @@ function JobOffers({ c }: { c: Ctx }) {
 function Opportunities({ c }: { c: Ctx }) {
   const [filter, setFilter] = useState('All');
   const [companyJobs, setCompanyJobs] = useState<Record<string, any>[]>([]);
+  const [simulations, setSimulations] = useState<Record<string, any>[]>([]);
+  const [simulationSubmissions, setSimulationSubmissions] = useState<Record<string, any>[]>([]);
+  const [simulationDrafts, setSimulationDrafts] = useState<Record<string, { answer: string; url: string }>>({});
+  const [submittingSimulation, setSubmittingSimulation] = useState('');
   const [jobsLoading, setJobsLoading] = useState(false);
   const [applyingJob, setApplyingJob] = useState('');
   const rows = c.records.opportunities.filter((o) => filter === 'All' || o.kind?.toLowerCase() === filter.toLowerCase());
@@ -2862,6 +3442,13 @@ function Opportunities({ c }: { c: Ctx }) {
     if (error) c.say(await functionErrorMessage(error, 'Company jobs could not load'), 'error');
     else if (data?.error) c.say(data.error, 'error');
     else setCompanyJobs(Array.isArray(data?.jobs) ? data.jobs : []);
+    const { data: simulationData, error: simulationError } = await supabase.functions.invoke('company-dashboard', { body: { action: 'list-public-simulations' } });
+    if (simulationError) c.say(await functionErrorMessage(simulationError, 'Company work simulations could not load'), 'error');
+    else if (simulationData?.error) c.say(simulationData.error, 'error');
+    else {
+      setSimulations(Array.isArray(simulationData?.simulations) ? simulationData.simulations : []);
+      setSimulationSubmissions(Array.isArray(simulationData?.mySubmissions) ? simulationData.mySubmissions : []);
+    }
     setJobsLoading(false);
   };
 
@@ -2919,6 +3506,21 @@ function Opportunities({ c }: { c: Ctx }) {
     finally { setApplyingJob(''); }
   };
 
+  const submitSimulation = async (simulation: Record<string, any>) => {
+    if (!supabase) return;
+    const draft = simulationDrafts[simulation.id] || { answer: '', url: '' };
+    setSubmittingSimulation(simulation.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('company-dashboard', { body: { action: 'submit-simulation', simulationId: simulation.id, answer: draft.answer, projectUrl: draft.url } });
+      if (error) throw new Error(await functionErrorMessage(error, 'Could not submit this task'));
+      if (data?.error) throw new Error(data.error);
+      c.say(data?.message || 'Company task submitted', 'success');
+      const { data: updated } = await supabase.functions.invoke('company-dashboard', { body: { action: 'list-public-simulations' } });
+      setSimulationSubmissions(updated?.mySubmissions || []);
+    } catch (error) { c.say(dbMessage(error, 'Could not submit this task'), 'error'); }
+    finally { setSubmittingSimulation(''); }
+  };
+
   return (
     <>
       <Head tag="YOUR NEXT CHAPTER" title="Opportunity hub" desc="Published opportunities from the Kariqo team." />
@@ -2961,7 +3563,10 @@ function Opportunities({ c }: { c: Ctx }) {
           return <Panel className="company-opening-card" key={job.id}><small>{job.company_name} · {job.job_type || 'Role'}</small><h3>{job.title}</h3><p>{job.location || 'Location shared after application'}</p><p>{job.description || 'Company is looking for candidates with these skills.'}</p><div className="tags">{(job.required_skills || []).map((skill: string) => <i key={skill}>{skill}</i>)}</div><button className={applied ? 'secondary' : 'primary'} onClick={() => void applyForCompanyJob(job)} disabled={applied || Boolean(applyingJob)}>{applied ? 'Application sent' : applyingJob === job.id ? 'Applying…' : 'Apply in Kariqo'} {!applied && <ArrowRight size={14} />}</button></Panel>;
         })}</div> : <Panel className="company-jobs-empty"><BriefcaseBusiness size={18} /><div><b>No company roles posted yet</b><p>Approved companies’ open roles will show here when they publish them.</p></div></Panel>}
       </section>
-      {!rows.length && !companyJobs.length && (
+      <section className="company-opportunities company-work-simulations"><div className="company-opportunities-head"><div><small>SHOW YOUR WORK · GET REAL FEEDBACK</small><h2>Company work simulations</h2><p>Try a sample task tied to a real role and submit your approach with project evidence.</p></div><button className="secondary" onClick={() => void loadCompanyJobs()} disabled={jobsLoading}><RefreshCw size={14} /> Refresh</button></div>
+        {simulations.length ? <div className="company-openings-grid">{simulations.map((simulation) => { const existing = simulationSubmissions.find((item) => item.simulation_id === simulation.id); const draft = simulationDrafts[simulation.id] || { answer: '', url: '' }; return <Panel className="company-opening-card company-simulation-student-card" key={simulation.id}><small>{simulation.company_name} · {simulation.job_title} {simulation.deadline ? `· Due ${new Date(simulation.deadline).toLocaleString()}` : ''}</small><h3>{simulation.title}</h3><p>{simulation.instructions}</p><div className="tags">{(simulation.expected_skills || []).map((skill: string) => <i key={skill}>{skill}</i>)}</div>{existing ? <div className="simulation-student-status"><Check size={14} /><span><b>Submitted · {existing.status}</b>{existing.score !== null && existing.score !== undefined && <small>Company review score: {existing.score}/100</small>}{existing.feedback && <small>{existing.feedback}</small>}</span></div> : <><label className="simulation-answer-label">Your approach and result<textarea rows={4} minLength={20} maxLength={8000} value={draft.answer} onChange={(event) => setSimulationDrafts((old) => ({ ...old, [simulation.id]: { ...draft, answer: event.target.value } }))} placeholder="Explain how you approached the task, decisions you made, and what you found…" /></label><label className="simulation-answer-label">Project or evidence link (optional)<input type="url" value={draft.url} onChange={(event) => setSimulationDrafts((old) => ({ ...old, [simulation.id]: { ...draft, url: event.target.value } }))} placeholder="https://github.com/you/project" /></label><button className="primary" onClick={() => void submitSimulation(simulation)} disabled={Boolean(submittingSimulation) || draft.answer.trim().length < 20}>{submittingSimulation === simulation.id ? 'Submitting…' : 'Submit work for review'} <ArrowRight size={14} /></button></>}</Panel>; })}</div> : <Panel className="company-jobs-empty"><Target size={18} /><div><b>No company tasks posted yet</b><p>Work simulations from approved companies will appear here.</p></div></Panel>}
+      </section>
+      {!rows.length && !companyJobs.length && !simulations.length && (
         <Panel className="discovery-empty opportunity-empty">
           <div className="discovery-empty-art opp-art"><Compass size={25} /><span><Sparkles size={15} /></span></div>
           <div className="discovery-empty-copy"><small>{filter === 'All' ? 'FRESH PATHS ARE ON THE WAY' : `${filter.toUpperCase()}S`}</small><h2>{filter === 'All' ? 'No opportunities published yet' : `No ${filter.toLowerCase()}s here yet`}</h2><p>{filter === 'All' ? 'New internships, challenges and projects will show up here when the Kariqo team publishes them. Keep building your roadmap and portfolio while you wait.' : `There are no ${filter.toLowerCase()} listings right now. Pick another category to explore, or check back after new listings are published.`}</p></div>
@@ -2993,6 +3598,7 @@ function Applications({ c }: { c: Ctx }) {
 
 function Mentor({ c }: { c: Ctx }) {
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
+  const [chatMentor, setChatMentor] = useState<Record<string, any> | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (!c.membershipActive) return <MembershipGate c={c} feature="mentor" />;
@@ -3051,9 +3657,10 @@ function Mentor({ c }: { c: Ctx }) {
                 <i key={x}>{x}</i>
               ))}
             </div>
-            <button className="secondary" onClick={() => setSelected(m)}>
-              Request a session <ArrowRight size={14} />
-            </button>
+            <div className="mentor-card-actions">
+              <button className="secondary" onClick={() => setChatMentor(m)}><MessageCircle size={14} /> Message mentor</button>
+              <button className="primary" onClick={() => setSelected(m)}>Request a session <ArrowRight size={14} /></button>
+            </div>
           </Panel>
         ))}
       </div>
@@ -3076,8 +3683,79 @@ function Mentor({ c }: { c: Ctx }) {
           </label>
         </EditorDialog>
       )}
+      {chatMentor && <MentorChatDialog mentor={chatMentor} studentId={c.userId} studentName={c.records.profile.full_name || c.user} onClose={() => setChatMentor(null)} say={c.say} />}
     </>
   );
+}
+
+function MentorChatDialog({ mentor, studentId, studentName, initialThread, viewerIsMentor = false, onClose, say }: {
+  mentor: Record<string, any>;
+  studentId: string;
+  studentName: string;
+  initialThread?: Record<string, any> | null;
+  viewerIsMentor?: boolean;
+  onClose: () => void;
+  say: (message: string, type?: 'success' | 'error' | 'info') => void;
+}) {
+  const [messages, setMessages] = useState<Record<string, any>[]>([]);
+  const [thread, setThread] = useState<Record<string, any> | null>(initialThread || null);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [draft, setDraft] = useState('');
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const loadMessages = async (knownThread?: Record<string, any> | null) => {
+    if (!supabase) { setLoading(false); return; }
+    let activeThread = knownThread || thread;
+    if (!activeThread && !viewerIsMentor) {
+      const { data, error } = await supabase.from('mentor_doubt_threads').select('*').eq('mentor_id', mentor.id).eq('student_id', studentId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (error) say(`Could not load this conversation: ${error.message}`, 'error');
+      activeThread = data || null;
+    }
+    if (!activeThread) { setMessages([]); setLoading(false); return; }
+    setThread(activeThread);
+    const { data, error } = await supabase.from('mentor_doubt_messages').select('*').eq('thread_id', activeThread.id).order('created_at');
+    if (error) say(`Could not load this conversation: ${error.message}`, 'error');
+    else {
+      const firstMessage = activeThread.initial_message ? [{ id: `initial-${activeThread.id}`, thread_id: activeThread.id, sender_id: activeThread.student_id, body: activeThread.initial_message, created_at: activeThread.created_at }] : [];
+      setMessages([...firstMessage, ...(data || [])]);
+    }
+    setLoading(false);
+  };
+  useEffect(() => {
+    void loadMessages(initialThread);
+    const timer = window.setInterval(() => void loadMessages(initialThread), 5000);
+    return () => window.clearInterval(timer);
+  }, [mentor.id, studentId, initialThread?.id]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages]);
+  const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const body = draft.trim();
+    if (!body || !supabase || sending) return;
+    setSending(true);
+    if (thread) {
+      const { error } = await supabase.from('mentor_doubt_messages').insert({ thread_id: thread.id, sender_id: viewerIsMentor ? mentor.user_id : studentId, body });
+      setSending(false);
+      if (error) return say(`Could not send message: ${error.message}`, 'error');
+      setDraft('');
+      await loadMessages(thread);
+    } else {
+      const { data, error } = await supabase.from('mentor_doubt_threads').insert({ student_id: studentId, mentor_id: mentor.id, subject: body.slice(0, 80), initial_message: body }).select('*').single();
+      setSending(false);
+      if (error) return say(`Could not start this conversation: ${error.message}`, 'error');
+      setDraft('');
+      await loadMessages(data);
+    }
+  };
+  return <div className="mentor-chat-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="mentor-chat-dialog" role="dialog" aria-modal="true" aria-label={`Message ${mentor.full_name}`}>
+      <header><span className="mentor-chat-avatar">{String(viewerIsMentor ? studentName : mentor.full_name || 'M').split(' ').map((part: string) => part[0]).slice(0, 2).join('')}</span><span><b>{viewerIsMentor ? studentName : mentor.full_name}</b><small>{viewerIsMentor ? `Student · ${mentor.title || 'Mentor'}` : mentor.title || 'Mentor'}</small></span><button className="secondary" onClick={onClose} aria-label="Close conversation"><X size={15} /></button></header>
+      <div className="mentor-chat-messages">
+        {loading ? <p className="mentor-chat-empty">Loading conversation…</p> : messages.length ? messages.map((message) => <article className={(viewerIsMentor ? message.sender_id === mentor.user_id : message.sender_id === studentId) ? 'mentor-chat-bubble mine' : 'mentor-chat-bubble'} key={message.id}><p>{message.body}</p><small>{new Date(message.created_at).toLocaleString()}</small></article>) : <div className="mentor-chat-empty"><MessageCircle size={22} /><b>Ask your mentor a question</b><span>Use this private chat to clear a doubt when you can’t connect live.</span></div>}
+        <div ref={bottomRef} />
+      </div>
+      <form onSubmit={(event) => void sendMessage(event)}><textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={3000} rows={2} placeholder="Type your doubt or reply…" aria-label="Message" /><button className="primary" disabled={!draft.trim() || sending}>{sending ? <Loader2 size={15} className="spin" /> : <Send size={15} />}<span>{sending ? 'Sending…' : 'Send'}</span></button></form>
+    </section>
+  </div>;
 }
 
 function Classes({ c }: { c: Ctx }) {
@@ -3085,6 +3763,7 @@ function Classes({ c }: { c: Ctx }) {
   const [myRegistrations, setMyRegistrations] = useState<Record<string, any>[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(true);
   const [studentMaterials, setStudentMaterials] = useState<Record<string, any>[]>([]);
+  const [studentClassNotes, setStudentClassNotes] = useState<Record<string, any>[]>([]);
   const [studentAssignments, setStudentAssignments] = useState<Record<string, any>[]>([]);
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, any>[]>([]);
   const [submissionBusy, setSubmissionBusy] = useState(false);
@@ -3098,12 +3777,14 @@ function Classes({ c }: { c: Ctx }) {
     setAttendanceLoading(false);
   };
   const loadClassResources = async () => {
-    if (!supabase || !c.records.classes.length) { setStudentMaterials([]); setStudentAssignments([]); setStudentSubmissions([]); return; }
+    if (!supabase || !c.records.classes.length) { setStudentMaterials([]); setStudentAssignments([]); setStudentSubmissions([]); setStudentClassNotes([]); return; }
     const classIds = c.records.classes.map((item) => item.id);
-    const [materials, assignments] = await Promise.all([
+    const [materials, assignments, notes] = await Promise.all([
       supabase.from('mentor_class_materials').select('*').in('class_id', classIds).order('created_at', { ascending: false }),
       supabase.from('mentor_class_assignments').select('*').in('class_id', classIds).order('due_at'),
+      supabase.from('mentor_class_notes').select('*').in('class_id', classIds),
     ]);
+    if (notes.error) c.say(`Could not load class recaps: ${notes.error.message}`, 'error'); else setStudentClassNotes(notes.data || []);
     if (materials.error) c.say(`Could not load class materials: ${materials.error.message}`, 'error'); else setStudentMaterials(await addMaterialAccessUrls(materials.data || []));
     if (assignments.error) c.say(`Could not load assignments: ${assignments.error.message}`, 'error');
     else {
@@ -3146,8 +3827,12 @@ function Classes({ c }: { c: Ctx }) {
       </Panel>
       {!c.membershipActive && <MembershipGate c={c} feature="classes" />}
       {c.membershipActive && <div className="cards two">
-        {c.records.classes.map((x) => (
-          <Panel className="event class-event" key={x.id}>
+        {c.records.classes.map((x) => {
+          const startsAt = new Date(x.starts_at).getTime();
+          const endsAt = startsAt + (Number(x.duration_minutes) || 60) * 60000;
+          const classIsOver = Date.now() > endsAt;
+          const canJoinClass = Date.now() >= startsAt - 10 * 60000 && !classIsOver;
+          return <Panel className="event class-event" key={x.id}>
             <CalendarDays />
             <span>
               <small>{new Date(x.starts_at).toLocaleString()}</small>
@@ -3169,13 +3854,23 @@ function Classes({ c }: { c: Ctx }) {
                 </article>;
               })}
             </div>
+            {registrationByClass.has(x.id) && classIsOver && <section className="student-class-recap">
+              <div className="student-class-recap-heading"><span><FileText size={15} /></span><div><b>Class finished · Review & revise</b><small>Notes and materials from this session</small></div></div>
+              {(() => {
+                const recap = studentClassNotes.find((note) => note.class_id === x.id && note.published);
+                return recap ? <><p>{recap.notes || 'Your mentor has not added written notes yet.'}</p>{recap.recording_url && <a className="secondary" href={recap.recording_url} target="_blank" rel="noopener noreferrer"><Video size={14} /> Watch class recording <ArrowRight size={13} /></a>}</>
+                  : <p>Your mentor hasn’t published the recap yet. Class materials above are still available to review.</p>;
+              })()}
+            </section>}
             {registrationByClass.has(x.id) && Date.now() >= new Date(x.starts_at).getTime() && Date.now() <= new Date(x.starts_at).getTime() + (Number(x.duration_minutes) || 60) * 60000 && <ClassGazeCoach title={x.title} />}
-            {registrationByClass.has(x.id) && isSafeMeetingUrl(x.meeting_url)
+            {registrationByClass.has(x.id) && canJoinClass && isSafeMeetingUrl(x.meeting_url)
               ? <a className="primary student-join-class" href={x.meeting_url} target="_blank" rel="noopener noreferrer"><Video size={15} /> Join live class <ArrowRight size={14} /></a>
-              : registrationByClass.has(x.id) && <button className="primary student-join-class" onClick={() => setActiveRoom({ id: x.id, title: x.title })}><Video size={15} /> Join in-app class <ArrowRight size={14} /></button>}
+              : registrationByClass.has(x.id) && canJoinClass
+                ? <button className="primary student-join-class" onClick={() => setActiveRoom({ id: x.id, title: x.title })}><Video size={15} /> Join in-app class <ArrowRight size={14} /></button>
+                : registrationByClass.has(x.id) && <p className="class-join-status">{classIsOver ? 'Class ended' : `Join opens 10 minutes before · ${new Date(x.starts_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}</p>}
             <button
               className={registrationByClass.has(x.id) ? 'registered-class-button' : 'secondary'}
-              disabled={registrationByClass.has(x.id) || new Date(x.starts_at).getTime() < Date.now()}
+              disabled={registrationByClass.has(x.id) || startsAt < Date.now()}
               onClick={async () => {
                 if (!supabase) return;
                 const { error } = await supabase.from('class_registrations').insert({ user_id: c.userId, class_id: x.id });
@@ -3183,10 +3878,10 @@ function Classes({ c }: { c: Ctx }) {
                 if (!error || error.code === '23505') await loadMyAttendance();
               }}
             >
-              {registrationByClass.has(x.id) ? <>Registered <Check size={14} /></> : new Date(x.starts_at).getTime() < Date.now() ? 'Class ended' : <>Register <ArrowRight size={14} /></>}
+              {registrationByClass.has(x.id) ? <>Registered <Check size={14} /></> : startsAt < Date.now() ? 'Class ended' : <>Register <ArrowRight size={14} /></>}
             </button>
-          </Panel>
-        ))}
+          </Panel>;
+        })}
       </div>}
       {c.membershipActive && !upcomingClasses.length && (
         <Panel>
@@ -3203,58 +3898,81 @@ function LiveClassRoom({ roomId, title, displayName, isHost = false, onClose }: 
   const containerRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const [status, setStatus] = useState('Securely joining the class…');
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => {
     let disposed = false;
     let api: JitsiExternalApi | undefined;
-    let script: HTMLScriptElement | null = null;
+    let timeout: number | undefined;
+    const fail = (message: string) => {
+      if (disposed) return;
+      window.clearTimeout(timeout);
+      setStatus(message);
+      setFailed(true);
+    };
     const start = (meeting: { token: string; roomName: string; domain: string; externalApiUrl: string }) => {
-      if (disposed || !containerRef.current || !window.JitsiMeetExternalAPI) return;
-      api = new window.JitsiMeetExternalAPI(meeting.domain, {
-        roomName: meeting.roomName,
-        jwt: meeting.token,
-        parentNode: containerRef.current,
-        width: '100%',
-        height: '100%',
-        userInfo: { displayName: displayName || 'Kariqo learner' },
-        configOverwrite: { startWithAudioMuted: true, startWithVideoMuted: true, prejoinConfig: { enabled: true } },
-      });
-      api.addListener('videoConferenceJoined', () => setStatus(isHost ? 'You’re hosting this live class. Camera and microphone start off; turn them on when ready.' : 'You’re in the live class. Camera and microphone start off; turn them on when you’re ready.'));
-      api.addListener('readyToClose', () => onCloseRef.current());
+      if (disposed || !containerRef.current) return;
+      if (!window.JitsiMeetExternalAPI) return fail('The video room did not finish loading. Check your connection and retry.');
+      try {
+        api = new window.JitsiMeetExternalAPI(meeting.domain, {
+          roomName: meeting.roomName,
+          jwt: meeting.token,
+          parentNode: containerRef.current,
+          width: '100%',
+          height: '100%',
+          userInfo: { displayName: displayName || 'Kariqo learner' },
+          configOverwrite: { startWithAudioMuted: true, startWithVideoMuted: true, prejoinConfig: { enabled: true } },
+        });
+        api.addListener('videoConferenceJoined', () => { window.clearTimeout(timeout); setFailed(false); setStatus(isHost ? 'You’re hosting this live class. Camera and microphone start off; turn them on when ready.' : 'You’re in the live class. Camera and microphone start off; turn them on when you’re ready.'); });
+        api.addListener('readyToClose', () => onCloseRef.current());
+        timeout = window.setTimeout(() => fail('The video room is taking too long to connect. Check your connection or retry.'), 20000);
+      } catch {
+        fail('Could not open the video room. Please retry, or ask the mentor to share a meeting link.');
+      }
     };
     const connect = async () => {
-      if (!supabase) { setStatus('Sign in to start this live class.'); return; }
+      setFailed(false);
+      setStatus('Securely joining the class…');
+      if (!supabase) { fail('Sign in to start this live class.'); return; }
       const { data, error } = await supabase.functions.invoke('jaas-meeting-token', { body: { classId: roomId } });
       if (disposed) return;
       if (error || !data?.token || !data?.roomName || !data?.externalApiUrl) {
-        setStatus(data?.error || error?.message || 'Could not prepare the live class. Try again in a moment.');
+        let message = data?.error || '';
+        const context = (error as (typeof error & { context?: Response }) | null)?.context;
+        if (!message && context && typeof context.clone === 'function') {
+          try { message = (await context.clone().json())?.error || ''; } catch { /* The response may not contain JSON. */ }
+        }
+        fail(message || error?.message || 'Could not prepare the live class. Check your sign-in and try again.');
         return;
       }
       const meeting = data as { token: string; roomName: string; domain: string; externalApiUrl: string };
-      const attach = () => start(meeting);
-      script = document.querySelector<HTMLScriptElement>('script[data-kariqo-jaas]');
-      if (window.JitsiMeetExternalAPI) attach();
-      else {
-        if (!script) {
-          script = document.createElement('script');
-          script.src = meeting.externalApiUrl;
-          script.async = true;
-          script.dataset.kariqoJaas = 'true';
-          document.head.appendChild(script);
-        }
-        script.addEventListener('load', attach, { once: true });
-        script.addEventListener('error', () => setStatus('Could not reach the JaaS video room. Check your connection and try again.'), { once: true });
+      timeout = window.setTimeout(() => fail('The video room is taking too long to connect. Check your connection or retry.'), 25000);
+      if (window.JitsiMeetExternalAPI) return start(meeting);
+      const existing = document.querySelector<HTMLScriptElement>('script[data-kariqo-jaas]');
+      const script = existing || document.createElement('script');
+      if (existing?.dataset.loadState === 'failed') { existing.remove(); }
+      const activeScript = existing?.dataset.loadState === 'failed' ? document.createElement('script') : script;
+      if (!existing || existing.dataset.loadState === 'failed') {
+        activeScript.src = meeting.externalApiUrl;
+        activeScript.async = true;
+        activeScript.dataset.kariqoJaas = 'true';
+        activeScript.dataset.loadState = 'loading';
+        document.head.appendChild(activeScript);
       }
+      activeScript.addEventListener('load', () => { activeScript.dataset.loadState = 'loaded'; start(meeting); }, { once: true });
+      activeScript.addEventListener('error', () => { activeScript.dataset.loadState = 'failed'; fail('Could not reach the video service. Check your internet connection and retry.'); }, { once: true });
     };
-    void connect().catch(() => { if (!disposed) setStatus('Could not start the live class. Sign in again and retry.'); });
+    void connect().catch(() => fail('Could not start the live class. Check your sign-in and retry.'));
     return () => {
       disposed = true;
+      window.clearTimeout(timeout);
       api?.dispose();
     };
-  }, [roomId, displayName, isHost]);
+  }, [roomId, displayName, isHost, attempt]);
   return <div className="live-room-shade" role="dialog" aria-modal="true" aria-label={`${title} live class`}>
     <section className="live-room-panel">
-      <header><div><small>KARIQO LIVE CLASS</small><h2>{title}</h2><p>{status}</p></div><div className="live-room-actions"><button className="secondary" onClick={onClose} aria-label="Leave class"><X size={16} /> Leave</button></div></header>
+      <header><div><small>KARIQO LIVE CLASS</small><h2>{title}</h2><p role="status" aria-live="polite">{status}</p></div><div className="live-room-actions">{failed && <button className="secondary" onClick={() => { setStatus('Reconnecting to the live class…'); setAttempt((value) => value + 1); }}><RefreshCw size={14} /> Retry</button>}<button className="secondary" onClick={onClose} aria-label="Leave class"><X size={16} /> Leave</button></div></header>
       <div className="live-room-frame" ref={containerRef} />
       <footer>Audio and video are off when you join. Allow browser camera/microphone access only if you want to speak or show video.</footer>
     </section>
@@ -3325,13 +4043,28 @@ function ClassGazeCoach({ title }: { title: string }) {
         const result = landmarker.detectForVideo(video, now);
         const points = result.faceLandmarks[0];
         if (!points) {
-          setStatus('Face not clear yet — adjust your camera or lighting.');
-          awaySince = 0;
+          if (!awaySince) awaySince = now;
+          const seconds = Math.round((now - awaySince) / 1000);
+          setStatus(seconds >= 12 ? 'Kiko noticed you may have stepped away.' : 'Face not clear — tracking this as a possible break.');
+          if (seconds >= 12 && !nudged) {
+            nudged = true;
+            setNudge(`You’ve been away from ${title} for a little while. Take your time, then come back when you’re ready.`);
+            if ('Notification' in window && Notification.permission === 'granted') new Notification('Kiko · gentle reminder', { body: `Your ${title} class is still open. Come back when you’re ready.` });
+          }
           return;
         }
         const leftEye = eyePosition(points, [33, 133], [468, 469, 470, 471, 472]);
         const rightEye = eyePosition(points, [362, 263], [473, 474, 475, 476, 477]);
-        const lookingAway = (leftEye < .27 && rightEye < .27) || (leftEye > .73 && rightEye > .73);
+        const eyeVertical = (top: number, bottom: number, iris: number[]) => {
+          const upper = points[top].y, lower = points[bottom].y;
+          const irisY = iris.reduce((sum, index) => sum + points[index].y, 0) / iris.length;
+          return (irisY - upper) / Math.max(.0001, lower - upper);
+        };
+        const leftVertical = eyeVertical(159, 145, [468, 469, 470, 471, 472]);
+        const rightVertical = eyeVertical(386, 374, [473, 474, 475, 476, 477]);
+        const lookingSideways = (leftEye < .24 && rightEye < .24) || (leftEye > .76 && rightEye > .76);
+        const lookingUpDown = (leftVertical < .15 && rightVertical < .15) || (leftVertical > .85 && rightVertical > .85);
+        const lookingAway = lookingSideways || lookingUpDown;
         if (lookingAway) {
           centeredSince = 0;
           if (!awaySince) awaySince = now;
@@ -3347,7 +4080,7 @@ function ClassGazeCoach({ title }: { title: string }) {
         } else {
           awaySince = 0;
           if (!centeredSince) centeredSince = now;
-          if (now - centeredSince > 2500) nudged = false;
+          if (now - centeredSince > 2500) { nudged = false; setNudge(''); }
           setStatus('Tracking locally · camera and lighting can affect accuracy.');
         }
       } catch {
@@ -3382,6 +4115,20 @@ function ClassGazeCoach({ title }: { title: string }) {
     return () => { document.removeEventListener('visibilitychange', onVisibilityChange); stopCamera(); };
   }, [active, title]);
 
+  useEffect(() => {
+    if (!nudge || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const text = nudge.startsWith('Quick reset')
+      ? `Hey! ${title} is still open. Ready to come back? Brief breaks are okay.`
+      : `Hi! ${title} is still open. Take a moment, then come back when you’re ready.`;
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.lang = 'en-IN'; speech.pitch = 1.15; speech.rate = 0.94;
+    const voices = window.speechSynthesis.getVoices();
+    speech.voice = voices.find((voice) => /female|samantha|karen|zira|google.*english.*female/i.test(voice.name)) || voices.find((voice) => voice.lang.toLowerCase().startsWith('en-in')) || null;
+    window.speechSynthesis.speak(speech);
+    return () => window.speechSynthesis.cancel();
+  }, [nudge, title]);
+
   const toggle = async () => {
     if (active) {
       setActive(false);
@@ -3396,11 +4143,14 @@ function ClassGazeCoach({ title }: { title: string }) {
     setActive(true);
   };
 
-  return <div className={`kiko-focus-nudge ${active ? 'active' : ''}`}>
+  return <>
+  <div className={`kiko-focus-nudge ${active ? 'active' : ''}`}>
     <div className="kiko-gaze-copy"><b>{active ? 'Kiko eye-focus nudges are on' : 'Try Kiko eye-focus nudges'}</b><small>Optional camera permission; browser notification permission may also be requested for reminders while you switch tabs. Eye direction is approximate and processed on this device; no video or gaze history is saved. Camera pauses if you switch away.</small><small className="kiko-gaze-status">{status}</small>{nudge && <span role="status">{nudge}</span>}<details><summary>How this works</summary><p>Kiko looks for sustained sideways eye direction and waits 12 seconds before a gentle reminder. Glances and breaks are normal; this is not attendance, an exam monitor, or proof of attention. You can stop it any time.</p></details></div>
     {active && <video ref={videoRef} className="kiko-camera-preview" muted playsInline aria-label="Local camera preview for Kiko eye focus" />}
     <button className={active ? 'secondary' : 'primary'} onClick={() => void toggle()}>{active ? 'Stop camera' : 'Enable camera'}</button>
-  </div>;
+  </div>
+  {nudge && createPortal(<div className="kiko-focus-overlay" role="dialog" aria-modal="true" aria-label="Kiko focus reminder"><section><div className="kiko-focus-walker"><BuddyCreature mood="supportive" /></div><small>KIKO · CLASS CHECK-IN</small><h2>Ready to come back?</h2><p>{nudge}</p><button className="primary" onClick={() => { setNudge(''); window.speechSynthesis?.cancel(); }}>I’m back <ArrowRight size={14} /></button><small className="kiko-focus-privacy">Gentle reminder only · eye direction is approximate and stays on this device.</small></section></div>, document.body)}
+  </>;
 }
 
 function Notifications({ c }: { c: Ctx }) {
