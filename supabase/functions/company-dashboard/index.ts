@@ -41,9 +41,35 @@ serve(async (req) => {
     if (authError || !user) return json({ error: 'Your sign-in expired. Sign in again.' }, 401);
 
     const admin = createClient(url, serviceKey);
-    let input: { action?: string; title?: string; description?: string; requiredSkills?: string[]; location?: string; jobType?: string; jobId?: string; studentId?: string; companyName?: string; offerId?: string; status?: string; applicationId?: string };
+    let input: { action?: string; title?: string; description?: string; requiredSkills?: string[]; location?: string; jobType?: string; jobId?: string; studentId?: string; companyName?: string; offerId?: string; status?: string; applicationId?: string; simulationId?: string; instructions?: string; projectUrl?: string; answer?: string; deadline?: string; submissionId?: string; score?: number; feedback?: string };
     try { input = await req.json(); } catch { return json({ error: 'Request body must be valid JSON.' }, 400); }
     const action = input.action || 'load';
+    if (action === 'list-public-simulations') {
+      const { data: approvedAccounts, error: approvedError } = await admin.from('skillora_company_accounts').select('company_id').eq('approved', true);
+      if (approvedError) return json({ error: `Could not verify participating companies: ${approvedError.message}` }, 500);
+      const approvedIds = [...new Set((approvedAccounts || []).map((row) => row.company_id))];
+      if (!approvedIds.length) return json({ simulations: [], mySubmissions: [] });
+      const { data, error } = await admin.from('skillora_company_simulations')
+        .select('id,company_id,job_id,title,instructions,expected_skills,deadline,created_at,skillora_companies(name),skillora_company_jobs(title,job_type)')
+        .eq('status', 'published').in('company_id', approvedIds).order('created_at', { ascending: false }).limit(100);
+      if (error) return json({ error: `Could not load company simulations: ${error.message}` }, 500);
+      const open = (data || []).filter((item: any) => !item.deadline || new Date(item.deadline).getTime() > Date.now());
+      const { data: mySubmissions, error: mySubmissionsError } = await admin.from('skillora_simulation_submissions').select('simulation_id,status,score,feedback,submitted_at').eq('student_id', user.id);
+      if (mySubmissionsError) return json({ error: `Could not load your simulation history: ${mySubmissionsError.message}` }, 500);
+      return json({ simulations: open.map((item: any) => ({ ...item, company_name: item.skillora_companies?.name || 'Approved company', job_title: item.skillora_company_jobs?.title || 'Role', job_type: item.skillora_company_jobs?.job_type || '' })), mySubmissions: mySubmissions || [] });
+    }
+    if (action === 'submit-simulation') {
+      const simulationId = String(input.simulationId || '');
+      const answer = String(input.answer || '').trim();
+      const projectUrl = String(input.projectUrl || '').trim();
+      if (!simulationId || answer.length < 20 || answer.length > 8000) return json({ error: 'Write at least 20 characters about your approach and result.' }, 400);
+      if (projectUrl && !/^https?:\/\//i.test(projectUrl)) return json({ error: 'Project link must start with https:// or http://.' }, 400);
+      const { data: simulation, error: simulationError } = await admin.from('skillora_company_simulations').select('id,status,deadline').eq('id', simulationId).single();
+      if (simulationError || !simulation || simulation.status !== 'published' || (simulation.deadline && new Date(simulation.deadline).getTime() <= Date.now())) return json({ error: 'This company simulation is closed.' }, 404);
+      const { error } = await admin.from('skillora_simulation_submissions').upsert({ simulation_id: simulationId, student_id: user.id, answer, project_url: projectUrl, status: 'submitted', submitted_at: new Date().toISOString() }, { onConflict: 'simulation_id,student_id' });
+      if (error) return json({ error: `Could not submit your simulation: ${error.message}` }, 500);
+      return json({ ok: true, message: 'Simulation submitted. The company will review your work and evidence.' });
+    }
     if (action === 'request-access') {
       const companyName = String(input.companyName || '').trim();
       if (companyName.length < 2 || companyName.length > 120) {
@@ -234,7 +260,58 @@ serve(async (req) => {
       return json({ ok: true, message: 'Job offer sent to the student's Skillvo workspace.' });
     }
 
-    if (action !== 'load') return json({ error: 'Unknown company portal action.' }, 400);
+    if (action === 'create-simulation') {
+      const jobId = String(input.jobId || '');
+      const title = String(input.title || '').trim();
+      const instructions = String(input.instructions || '').trim();
+      const expectedSkills = [...new Set((input.requiredSkills || []).map((skill) => String(skill).trim()).filter(Boolean))].slice(0, 12);
+      const { data: job } = await admin.from('skillora_company_jobs').select('id').eq('id', jobId).eq('company_id', company.id).eq('status', 'open').maybeSingle();
+      if (!job) return json({ error: 'Choose one of your open roles for this work simulation.' }, 400);
+      if (title.length < 3 || instructions.length < 20 || instructions.length > 6000) return json({ error: 'Add a clear task title and at least 20 characters of instructions.' }, 400);
+      const deadline = input.deadline ? new Date(input.deadline) : null;
+      if (deadline && (!Number.isFinite(deadline.getTime()) || deadline.getTime() <= Date.now())) return json({ error: 'Choose a future submission deadline.' }, 400);
+      const { data: simulation, error } = await admin.from('skillora_company_simulations').insert({ company_id: company.id, job_id: jobId, title, instructions, expected_skills: expectedSkills, deadline: deadline?.toISOString() || null }).select('id').single();
+      if (error) return json({ error: `Could not publish the simulation: ${error.message}` }, 500);
+      return json({ ok: true, simulationId: simulation.id });
+    }
+    if (action === 'list-simulations') {
+      const { data: simulations, error } = await admin.from('skillora_company_simulations').select('id,job_id,title,instructions,expected_skills,deadline,status,created_at').eq('company_id', company.id).order('created_at', { ascending: false });
+      if (error) return json({ error: `Could not load your simulations: ${error.message}` }, 500);
+      const ids = (simulations || []).map((item) => item.id);
+      const { data: submissions, error: submissionsError } = ids.length
+        ? await admin.from('skillora_simulation_submissions').select('id,simulation_id,student_id,answer,project_url,status,score,feedback,submitted_at').in('simulation_id', ids).order('submitted_at', { ascending: false })
+        : { data: [] as any[], error: null };
+      if (submissionsError) return json({ error: `Could not load simulation submissions: ${submissionsError.message}` }, 500);
+      const optedInIds = [...new Set((submissions || []).map((row) => row.student_id))];
+      const { data: optedIn, error: profileError } = optedInIds.length
+        ? await admin.from('profiles').select('id,full_name,course,college,recruiter_visible,ats_resume_text').in('id', optedInIds).eq('recruiter_visible', true)
+        : { data: [] as any[], error: null };
+      if (profileError) return json({ error: `Could not load opted-in submitters: ${profileError.message}` }, 500);
+      const allowed = new Map((optedIn || []).map((profile) => [profile.id, profile]));
+      return json({ simulations: simulations || [], submissions: (submissions || []).filter((row) => allowed.has(row.student_id)).map((row) => ({ ...row, student: allowed.get(row.student_id) })) });
+    }
+    if (action === 'review-simulation') {
+      const submissionId = String(input.submissionId || '');
+      const status = String(input.status || '');
+      if (!submissionId || !['reviewing', 'shortlisted', 'not_selected'].includes(status)) return json({ error: 'Choose a valid review decision.' }, 400);
+      const { data: submission } = await admin.from('skillora_simulation_submissions').select('id,simulation_id,student_id').eq('id', submissionId).single();
+      const { data: simulation } = submission ? await admin.from('skillora_company_simulations').select('id,company_id,job_id,title').eq('id', submission.simulation_id).eq('company_id', company.id).single() : { data: null };
+      if (!submission || !simulation) return json({ error: 'Submission not found for this company.' }, 404);
+      const score = input.score === undefined || input.score === null ? null : Number(input.score);
+      if (score !== null && (!Number.isFinite(score) || score < 0 || score > 100)) return json({ error: 'Review score must be between 0 and 100.' }, 400);
+      if (status === 'shortlisted') {
+        const { data: profile } = await admin.from('profiles').select('recruiter_visible').eq('id', submission.student_id).single();
+        if (!profile?.recruiter_visible) return json({ error: 'This student has turned off employer sharing. Their details will not be sent to the hiring tracker.' }, 409);
+      }
+      const { error } = await admin.from('skillora_simulation_submissions').update({ status, score, feedback: String(input.feedback || '').slice(0, 4000), reviewed_at: new Date().toISOString() }).eq('id', submission.id);
+      if (error) return json({ error: `Could not save the review: ${error.message}` }, 500);
+      if (status === 'shortlisted') {
+        const { error: applicationError } = await admin.from('skillvo_job_applications').upsert({ student_id: submission.student_id, company_job_id: simulation.job_id, source_key: `simulation:${simulation.id}`, job_title: simulation.title, company_name: company.name, status: 'interview' }, { onConflict: 'student_id,source_key' });
+        if (applicationError) return json({ error: `Review saved, but the hiring tracker could not be updated: ${applicationError.message}` }, 500);
+      }
+      return json({ ok: true, message: status === 'shortlisted' ? 'Student shortlisted. Their application tracker now shows an interview-stage update.' : 'Simulation review saved.' });
+    }
+    if (!['load', 'ai-shortlist'].includes(action)) return json({ error: 'Unknown company portal action.' }, 400);
     const [{ data: jobs, error: jobsError }, { data: offers, error: offersError }] = await Promise.all([
       admin.from('skillora_company_jobs').select('id,title,description,required_skills,location,job_type,status,created_at').eq('company_id', company.id).order('created_at', { ascending: false }),
       admin.from('skillora_job_offers').select('id,job_id,student_id,match_score,status,created_at,company_name,job_title,job_location').eq('company_id', company.id).order('created_at', { ascending: false }),
@@ -269,7 +346,7 @@ serve(async (req) => {
       if (ids.length) {
         const [{ data: skills, error: skillsError }, { data: projects, error: projectsError }, { data: roadmaps, error: roadmapsError }, { data: practices, error: practicesError }, { data: attendance, error: attendanceError }, { data: submissions, error: submissionsError }] = await Promise.all([
           admin.from('skills').select('user_id,name,score').in('user_id', ids),
-          admin.from('projects').select('user_id,title,description,progress').in('user_id', ids),
+          admin.from('projects').select('user_id,title,description,progress,repository_url,demo_url').in('user_id', ids),
           admin.from('roadmaps').select('user_id').in('user_id', ids),
           admin.from('skillvo_interview_practice').select('user_id,practice_date').in('user_id', ids),
           admin.from('class_registrations').select('user_id,attendance_status').in('user_id', ids),
@@ -279,7 +356,7 @@ serve(async (req) => {
         const skillMap = new Map<string, { name: string; score: number }[]>();
         for (const skill of skills || []) skillMap.set(skill.user_id, [...(skillMap.get(skill.user_id) || []), { name: skill.name, score: skill.score }]);
         const projectMap = new Map<string, { title: string; description: string }[]>();
-        for (const project of projects || []) if (Number(project.progress) === 100) projectMap.set(project.user_id, [...(projectMap.get(project.user_id) || []), { title: project.title, description: project.description }]);
+        for (const project of projects || []) if (Number(project.progress) === 100) projectMap.set(project.user_id, [...(projectMap.get(project.user_id) || []), { title: project.title, description: project.description, repository_url: project.repository_url || '', demo_url: project.demo_url || '' }]);
         const forStudent = (rows: Record<string, any>[], key: string, id: string) => rows.filter((row) => row[key] === id);
         const roadmapIds = new Set((roadmaps || []).map((item) => item.user_id));
         const needed = (job.required_skills || []).map((skill: string) => String(skill).trim().toLowerCase()).filter(Boolean);
@@ -295,9 +372,32 @@ serve(async (req) => {
               skills: studentSkills, projects: projectMap.get(profile.id) || [], matchScore,
               existingOffer: offers?.find((offer) => offer.job_id === job.id && offer.student_id === profile.id) || null,
             };
-          }).filter((candidate) => Number(candidate.matchScore) >= 50 && Number(candidate.readinessScore) >= 70)
+          }).filter((candidate) => (action === 'ai-shortlist' ? Number(candidate.readinessScore) >= 70 : Number(candidate.matchScore) >= 50 && Number(candidate.readinessScore) >= 70))
           .sort((left, right) => Number(right.matchScore) - Number(left.matchScore));
       }
+    }
+    if (action === 'ai-shortlist') {
+      const apiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('skillora_key_1');
+      if (!apiKey) return json({ error: 'Company AI shortlist needs the Gemini API key configured for Career Copilot.' }, 503);
+      if (!input.jobId || !jobs?.some((job) => job.id === input.jobId && job.status === 'open')) return json({ error: 'Choose an open company role before running the AI shortlist.' }, 400);
+      const eligible = candidates.slice(0, 50).map((candidate: any) => ({ id: candidate.id, skills: candidate.skills.map((skill: any) => ({ name: skill.name, evidence_score: skill.score })), projects: candidate.projects, readiness: candidate.readinessScore, requirement_match: candidate.matchScore, goal: candidate.careerGoal }));
+      const role = jobs.find((job) => job.id === input.jobId);
+      const aiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', { method: 'POST', headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({
+        systemInstruction: { parts: [{ text: 'You are an explainable recruiting assistant. Rank only candidates included in this JSON. Evaluate stated role skills, evidence-backed skills/projects, and role alignment. Never infer protected traits or fabricate evidence. This is advisory review support; a human employer makes all hiring decisions. Return JSON only with ranked: [{id,reason,matched_requirements,development_gaps}]. Keep reasons specific to provided data.' }] },
+        contents: [{ role: 'user', parts: [{ text: JSON.stringify({ role: { title: role?.title, description: role?.description, required_skills: role?.required_skills }, candidates: eligible }) }] }],
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2500 },
+      }) });
+      const result = await aiResponse.json();
+      if (!aiResponse.ok) return json({ error: aiResponse.status === 429 ? 'Gemini quota reached. Try again later; you can still use the transparent skill-match ranking.' : 'Gemini could not rank the eligible candidates right now.' }, 502);
+      const text = result.candidates?.[0]?.content?.parts?.find((part: any) => typeof part.text === 'string')?.text;
+      try {
+        const ranked = JSON.parse(text || '{}').ranked;
+        if (!Array.isArray(ranked)) throw new Error('No ranking');
+        const permitted = new Map(candidates.map((candidate: any) => [candidate.id, candidate]));
+        const shortlist = ranked.filter((item: any) => permitted.has(item.id)).slice(0, 20).map((item: any) => ({ ...permitted.get(item.id), aiReason: String(item.reason || '').slice(0, 600), aiMatchedRequirements: Array.isArray(item.matched_requirements) ? item.matched_requirements.slice(0, 10) : [], aiGaps: Array.isArray(item.development_gaps) ? item.development_gaps.slice(0, 10) : [] }));
+        return json({ company, jobs: jobs || [], offers: offers || [], applications: companyApplications.filter((application) => !input.jobId || application.company_job_id === input.jobId), candidates: shortlist, aiShortlist: true,
+          plan: { name: subscriptionStillValid ? 'Pro hiring' : 'Starter', status: companySubscription?.status || 'free', currentEnd: companySubscription?.current_end || null, activeJobLimit: subscriptionStillValid ? 5 : 1 } });
+      } catch { return json({ error: 'Gemini returned an unreadable shortlist. Try again or use the standard skill match.' }, 502); }
     }
     return json({ company, jobs: jobs || [], offers: offers || [], applications: companyApplications.filter((application) => !input.jobId || application.company_job_id === input.jobId), candidates,
       plan: { name: subscriptionStillValid ? 'Pro hiring' : 'Starter', status: companySubscription?.status || 'free', currentEnd: companySubscription?.current_end || null, activeJobLimit: subscriptionStillValid ? 5 : 1 } });
