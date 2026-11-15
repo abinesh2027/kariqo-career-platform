@@ -257,7 +257,7 @@ serve(async (req) => {
         company_name: company.name, job_title: job.title, job_location: job.location,
       }, { onConflict: 'job_id,student_id' });
       if (error) return json({ error: `Could not send the offer: ${error.message}` }, 500);
-      return json({ ok: true, message: 'Job offer sent to the student's Skillvo workspace.' });
+      return json({ ok: true, message: "Job offer sent to the student's Skillvo workspace." });
     }
 
     if (action === 'create-simulation') {
